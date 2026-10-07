@@ -1,0 +1,18 @@
+{
+  "name": "SIDLNE Demo",
+  "short_name": "SIDLNE",
+  "description": "A public, privacy-safe demo of SIDLNE—the family sports calendar.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f7f3",
+  "theme_color": "#171a16",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

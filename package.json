@@ -1,0 +1,9 @@
+{
+  "name": "sidlne-demo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8000 --directory site || python3 -m http.server 8001 --directory site",
+    "dev": "python3 -m http.server 8000 --directory site || python3 -m http.server 8001 --directory site"
+  }
+}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#171a16">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SIDLNE">
+  <meta name="description" content="A public, privacy-safe demo of SIDLNE—the family sports calendar.">
+  <title>SIDLNE Demo — Every sport. One place.</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23171a16'/%3E%3Cpath d='M43 18H26c-7 0-10 10-3 13l14 6c4 2 2 9-3 9H17' fill='none' stroke='%23c5f65a' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">SIDLNE<b>/</b><span class="demo-tag">PUBLIC DEMO</span></div>
+    <div class="workspace"><i>D</i><div><strong>Demo Family</strong><small>Sample schedule only</small></div></div>
+    <div class="nav-title">TRY THE APP</div>
+    <nav class="nav" id="sideNav"></nav>
+    <div class="privacy"><strong>✓ Privacy-safe demo</strong>No password, personal calendars, names, links or messages.</div>
+  </aside>
+  <div class="shell">
+    <header class="topbar"><button class="menu" aria-label="Open menu">☰</button><div class="crumb">SIDLNE Demo <b>/</b> <span id="crumb">Overview</span></div><div class="top-actions"><span class="live"><i></i>Ready to test</span><span class="avatar">DF</span></div></header>
+    <main class="content">
+      <div class="page-head"><div><div class="eyebrow" id="todayLabel"></div><h1 id="pageTitle">All your sports. Zero chaos.</h1><div class="subtitle" id="pageSubtitle">Try the family sports calendar with sample events.</div></div><button class="primary" id="addBtn">＋ Add event</button></div>
+      <div class="demo-notice"><span>✓</span><span><strong>This is a public demo.</strong> Everything is sample data, and anything you add stays on this device.</span></div>
+      <section id="overviewView">
+        <div class="grid-top"><div class="next"><span class="eyebrow">UP NEXT</span><h2 id="nextTitle">Loading next event…</h2><p id="nextWhen"></p><p id="nextWhere"></p><span class="ghost">S/</span></div><div class="stat"><span class="eyebrow">NEXT 7 DAYS</span><strong id="weekCount">0</strong><p>events<br>in the lineup</p><small>2 athletes · 4 teams</small></div></div>
+        <div class="main-grid"><div id="calendarPanel"></div><aside class="rail"><div class="rail-card"><h2>Heads up</h2><span class="chip">SCHEDULE OVERLAP</span><h3>Two places.<br>One you.</h3><p>Avery and Jordan have overlapping events. Tap Rides to line up a driver.</p><button class="outline" data-go="Rides">Plan the rides</button></div><div class="rail-card"><h2>One place beats five.</h2><div class="logos"><i>SE</i><i>TS</i><i>LA</i><i>CB</i><i>SC</i><i>SS</i></div><p>The real family version connects live sports calendars automatically.</p><button class="link-btn" data-go="Apps">View demo connections</button></div></aside></div>
+      </section>
+      <section id="simpleView" class="hidden"></section>
+      <footer><span>SIDLNE / EVERY SPORT. ONE PLACE.</span><span>PUBLIC DEMO · NO PRIVATE DATA</span></footer>
+    </main>
+  </div>
+</div>
+<nav class="mobile-nav" id="mobileNav"></nav>
+<div class="install" id="installTip"><div><b>Add SIDLNE to your phone</b><p>On iPhone: tap Share, then “Add to Home Screen.”</p></div><button class="x" aria-label="Dismiss">×</button></div>
+<div class="modal-bg hidden" id="modalBg"><div class="modal" id="modal"></div></div>
+<div class="toast hidden" id="toast"></div>
+<script src="./assets/app.js"></script>
+<footer style="margin-left:232px;padding:20px 35px 34px;text-align:center;color:#71796d;font:12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><a href="./install.html" style="color:#566d3e;font-weight:700">Install on iPhone</a> · <a href="./privacy.html" style="color:#566d3e;font-weight:700">Privacy</a> · <a href="./support.html" style="color:#566d3e;font-weight:700">Support</a></footer>
+</body>
+</html>
