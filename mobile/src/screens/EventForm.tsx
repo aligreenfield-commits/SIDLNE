@@ -17,7 +17,7 @@ export default function EventForm() {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
-  const [athlete, setAthlete] = useState('Avery');
+  const [athlete, setAthlete] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export default function EventForm() {
         setLocation(ev.location || '');
         setStartText(ev.start || '');
         setEndText(ev.end || '');
-        setAthlete(ev.athlete || 'Avery');
+        setAthlete(ev.athlete || '');
 
         if (ev.start) setStartDate(new Date(ev.start));
         if (ev.end) setEndDate(new Date(ev.end));
@@ -73,8 +73,7 @@ export default function EventForm() {
         location: location.trim() || undefined,
         start: trimmedStart,
         end: trimmedEnd || undefined,
-        athlete: athlete.trim() || 'Avery',
-        team: 'Demo Team',
+        athlete: athlete.trim() || undefined,
       };
 
       setLoading(true);
