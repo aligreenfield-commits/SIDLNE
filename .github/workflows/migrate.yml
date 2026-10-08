@@ -1,0 +1,34 @@
+# GitHub Actions template: run Supabase migrations
+
+# Note: this is a template. It will not run unless you add the required repo secrets and enable it.
+
+name: Run Supabase migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: 'Environment to migrate (dev|staging|prod)'
+        required: true
+        default: 'dev'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Run migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }} # postgres connection string
+        run: |
+          chmod +x infra/scripts/migrate.sh
+          ./infra/scripts/migrate.sh
+
+# To enable:
+# 1) Add SUPABASE_DB_URL as a repository secret (Postgres connection string for target DB).
+# 2) Trigger this workflow manually from the Actions tab.
