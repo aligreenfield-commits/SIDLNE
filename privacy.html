@@ -1,20 +1,31 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SIDLNE Privacy</title>
-    <style>
-      body { font-family: Arial, sans-serif; background:#f6f7f3; color:#171a16; margin:0; padding:40px 20px; }
-      .card { max-width:680px; margin:0 auto; background:#fff; border-radius:18px; padding:28px; box-shadow:0 12px 32px rgba(0,0,0,.08); }
-      h1 { margin-top:0; }
-    </style>
-  </head>
-  <body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SIDLNE Privacy</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f6f7f3; color: #171a16; margin: 0; }
+    main { max-width: 800px; margin: 72px auto; padding: 24px; }
+    .card { background: #fff; border: 1px solid #dfe4d8; border-radius: 18px; padding: 28px; }
+    h1 { margin-top: 0; font-size: clamp(2rem, 4vw, 2.6rem); letter-spacing: -0.06em; }
+    p, li { line-height: 1.7; color: #58654c; }
+    a { color: #566d3e; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
     <div class="card">
       <h1>Privacy</h1>
-      <p>This public demo stores only sample data locally in the browser. No personal names, private calendars, or account information are used.</p>
+      <p>This is a public demo. It is designed to avoid collecting personal information.</p>
+      <ul>
+        <li>No passwords are required.</li>
+        <li>No personal calendars, contacts, or account data are requested.</li>
+        <li>Demo events you add stay in the browser only via local storage.</li>
+        <li>No private data is transmitted to a remote server in this demo.</li>
+      </ul>
       <p><a href="/">Back to SIDLNE</a></p>
     </div>
-  </body>
+  </main>
+</body>
 </html>
