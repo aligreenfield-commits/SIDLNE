@@ -44,7 +44,6 @@ const normalizeEventPayload = (event: Partial<EventItem>) => {
     if (!payload.location) delete payload.location;
   }
 
-  // Accept Date or ISO string and convert to canonical ISO string stored in DB
   if (payload.start !== undefined) {
     const d = parseDate(payload.start as any);
     if (d) payload.start = d.toISOString();
@@ -75,7 +74,7 @@ export const fetchEvents = async () => {
   let query = supabase.from('events').select('*');
 
   if (householdId) {
-    query = query.eq('household_id', householdId);
+    query = query.or(`created_by.eq.${userId},household_id.eq.${householdId}`);
   } else {
     query = query.eq('created_by', userId);
   }
@@ -92,14 +91,11 @@ export const fetchEventById = async (id: string) => {
   const ev = data as EventItem | null;
   if (!ev) return null;
 
-  // Enforce household scoping client-side as a second defense (RLS should be primary)
   const userId = await getCurrentUserId();
   const householdId = await getCurrentHouseholdId();
 
-  if (householdId && ev.household_id === householdId) return ev;
   if (ev.created_by === userId) return ev;
-
-  // Not visible to this user/household
+  if (householdId && ev.household_id === householdId) return ev;
   return null;
 };
 
@@ -109,21 +105,24 @@ export const createEvent = async (event: Partial<EventItem>) => {
   if (!userId) throw new Error('You must be signed in to create an event.');
 
   const householdId = await getCurrentHouseholdId();
-  if (!householdId) throw new Error('Create a household before adding events.');
 
   const normalized = normalizeEventPayload(event);
   if (!normalized.title || !normalized.start) {
     throw new Error('Title and start time are required.');
   }
 
-  // Validate start/end ordering
   if (normalized.end) {
     const s = new Date(normalized.start);
     const e = new Date(normalized.end);
     if (s.getTime() >= e.getTime()) throw new Error('End time must be after start time.');
   }
 
-  const payload = { ...normalized, created_by: userId, household_id: householdId };
+  const payload = {
+    ...normalized,
+    created_by: userId,
+    household_id: householdId ?? null,
+  };
+
   const { data, error } = await supabase.from('events').insert([payload]).select().single();
   if (error) throw error;
   return data as EventItem;
@@ -141,9 +140,7 @@ export const updateEvent = async (id: string, updates: Partial<EventItem>) => {
     throw new Error('Start time cannot be empty.');
   }
 
-  // If both start and end are present (either in updates or already in DB), ensure ordering.
   if (normalized.start || normalized.end) {
-    // Fetch current event to get any missing values
     const current = await fetchEventById(id);
     const startIso = normalized.start ?? current?.start;
     const endIso = normalized.end ?? current?.end;
@@ -166,7 +163,6 @@ export const deleteEvent = async (id: string) => {
   return true;
 };
 
-// Rides helpers
 export const fetchRides = async () => {
   const supabase = getSupabaseClient();
   const userId = await getCurrentUserId();
@@ -174,14 +170,13 @@ export const fetchRides = async () => {
 
   const householdId = await getCurrentHouseholdId();
 
-  // select ride fields and join event and driver profile (adjust relation names if needed)
   let query = supabase
     .from('rides')
     .select('*, event:events(*), driver:profiles(display_name)')
     .order('inserted_at', { ascending: true });
 
   if (householdId) {
-    query = query.eq('household_id', householdId);
+    query = query.or(`created_by.eq.${userId},household_id.eq.${householdId}`);
   } else {
     query = query.eq('created_by', userId);
   }
@@ -197,9 +192,14 @@ export const createRide = async (ride: Partial<any>) => {
   if (!userId) throw new Error('Sign in required');
 
   const householdId = await getCurrentHouseholdId();
-  if (!householdId) throw new Error('Create a household before adding rides.');
 
-  const payload = { ...ride, created_by: userId, household_id: householdId, status: 'open' };
+  const payload = {
+    ...ride,
+    created_by: userId,
+    household_id: householdId ?? null,
+    status: 'open',
+  };
+
   const { data, error } = await supabase.from('rides').insert([payload]).select().single();
   if (error) throw error;
   return data;
