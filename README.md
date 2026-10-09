@@ -32,7 +32,7 @@ GitHub Pages publishes the web app straight from the `main` branch. Going live t
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor**, paste in all of [`infra/supabase/setup.sql`](infra/supabase/setup.sql) and click **Run**. It is safe to run again later.
-3. Under **Authentication → URL Configuration**, set the **Site URL** to `https://sidlne.pages.dev/` and add the same URL to **Redirect URLs**.
+3. Under **Authentication → URL Configuration**, set the **Site URL** to `https://sidlne.app/` and add the same URL to **Redirect URLs**.
 
 ### 2. Point the app at it
 
