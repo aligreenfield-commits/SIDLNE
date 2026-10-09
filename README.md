@@ -19,46 +19,43 @@
 
 | Piece | Where | Notes |
 | --- | --- | --- |
-| Web app | `index.html`, `assets/`, `config.js` | Static files with no build step. Hosted on GitHub Pages. |
+| Web app | `index.html`, `assets/`, `config.js` | Static files with no build step. GitHub Pages serves them from `main`. |
 | Database | `infra/supabase/migrations/` | Postgres schema, RLS policies and RPCs. Idempotent, so it's safe to re-run. |
 | Calendar sync | `supabase/functions/sync-calendar/` | Supabase Edge Function (Deno) that downloads and parses iCal feeds. |
 | Mobile app | `mobile/` | Expo / React Native app that uses the same Supabase backend. |
 
 ## Deploy
 
+GitHub Pages publishes the web app straight from the `main` branch. Going live takes three steps:
+
 ### 1. Create the Supabase project
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Apply the schema, using either of these:
-   - Run `./infra/scripts/migrate.sh` with `SUPABASE_DB_URL` set to the database connection string (Project Settings → Database → Connection string → URI), **or**
-   - Add `SUPABASE_DB_URL` as a repository secret and run the **Run Supabase migrations** workflow from the Actions tab.
-3. Under **Authentication → URL Configuration**, set the **Site URL** to your app's URL (for example `https://aligreenfield-commits.github.io/SIDLNE/`) and add it to **Redirect URLs**. Confirmation and password-reset links use it.
-4. Optional: under **Authentication → Emails**, set up custom SMTP. Supabase's built-in email sender is heavily rate-limited and is not meant for production use.
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor**, paste in all of [`infra/supabase/setup.sql`](infra/supabase/setup.sql) and click **Run**. It is safe to run again later.
+3. Under **Authentication → URL Configuration**, set the **Site URL** to `https://aligreenfield-commits.github.io/SIDLNE/` and add the same URL to **Redirect URLs**.
 
-### 2. Configure GitHub
+### 2. Point the app at it
 
-In the repository's **Settings**:
+In `config.js`, fill in the **Project URL** and the **anon public** key from **Project Settings → API**, then commit to `main`. The anon key is designed to be public, because the Row Level Security policies protect your data. Never put the `service_role` key in the app.
 
-- **Pages → Build and deployment → Source:** choose **GitHub Actions**.
-- **Secrets and variables → Actions → Variables:**
-  - `SUPABASE_URL`, for example `https://abcd1234.supabase.co`
-  - `SUPABASE_ANON_KEY`, the project's public anon key (Project Settings → API)
-  - `SUPABASE_PROJECT_REF`, for example `abcd1234`
-- **Secrets and variables → Actions → Secrets:**
-  - `SUPABASE_ACCESS_TOKEN`, a personal access token from supabase.com/dashboard/account/tokens. The workflow uses it to deploy the Edge Function.
-  - `SUPABASE_DB_URL`, only needed for the migrations workflow.
+### 3. Turn on team calendar import
 
-### 3. Ship it
+Under the repo's **Settings → Secrets and variables → Actions**:
 
-Push to `main`. The **Deploy** workflow then:
+- add the variable `SUPABASE_PROJECT_REF`, the ID in your project URL (for example `abcd1234`),
+- add the secret `SUPABASE_ACCESS_TOKEN`, created at supabase.com/dashboard/account/tokens.
 
-1. writes `config.js` from your variables,
-2. publishes the site to GitHub Pages, and
-3. deploys the `sync-calendar` Edge Function.
+Then run the **Deploy calendar sync** workflow from the Actions tab. Until both are set, the workflow skips the deploy instead of failing.
 
 To deploy the function by hand instead, run `supabase functions deploy sync-calendar --project-ref <ref>`.
 
-The anon key is designed to be public. Your data is protected by the Row Level Security policies in `002_security.sql`, so never put the `service_role` key in the web app.
+### Before inviting lots of families
+
+Set up custom SMTP under **Authentication → Emails**. Supabase's built-in email sender is heavily rate-limited.
+
+### Updating the database later
+
+Run `./infra/scripts/migrate.sh` with `SUPABASE_DB_URL` set, or run the **Run Supabase migrations** workflow. If you add a migration, regenerate `setup.sql` too.
 
 ## Run locally
 
@@ -80,5 +77,5 @@ infra/supabase/migrations/          Database schema and security
 infra/scripts/migrate.sh            Applies migrations with psql
 supabase/functions/sync-calendar/   iCal import Edge Function
 mobile/                             Expo mobile app
-.github/workflows/                  Deploy and migration pipelines
+.github/workflows/                  Edge Function deploy and migrations
 ```

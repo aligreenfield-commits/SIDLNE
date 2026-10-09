@@ -1,82 +1,36 @@
-# Deploys the SIDLNE web app to GitHub Pages and the calendar sync function
-# to Supabase on every push to main.
+# Deploys the sync-calendar Edge Function to Supabase on every push to main.
 #
-# One-time setup (see README):
-#   Settings > Pages > Source: "GitHub Actions"
-#   Settings > Secrets and variables > Actions
-#     Variables: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_PROJECT_REF
-#     Secrets:   SUPABASE_ACCESS_TOKEN (only needed to deploy the Edge Function)
+# The web app itself is published by GitHub Pages straight from the main
+# branch, using the Supabase settings in config.js.
+#
+# One-time setup (Settings > Secrets and variables > Actions):
+#   Variable: SUPABASE_PROJECT_REF   e.g. abcd1234
+#   Secret:   SUPABASE_ACCESS_TOKEN  from supabase.com/dashboard/account/tokens
+# Until both are set, this workflow skips the deploy instead of failing.
 
-name: Deploy
+name: Deploy calendar sync
 
 on:
   push:
     branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check configuration
-        env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-        run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository variables before deploying."
-            exit 1
-          fi
-
-      - name: Assemble site
-        env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-        run: |
-          mkdir -p _site
-          cp -r index.html install.html privacy.html support.html manifest.webmanifest service-worker.js assets icons _site/
-          node -e '
-            const cfg = { supabaseUrl: process.env.SUPABASE_URL, supabaseAnonKey: process.env.SUPABASE_ANON_KEY };
-            require("fs").writeFileSync("_site/config.js", "window.SIDLNE_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
-          '
-          # Bust the service worker cache on every deploy
-          sed -i "s/__BUILD__/${GITHUB_SHA::12}/" _site/service-worker.js
-          touch _site/.nojekyll
-
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-  deploy-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
-
   deploy-function:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
     steps:
+      - name: Skip when not configured
+        if: env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_PROJECT_REF == ''
+        run: echo "::notice::Set SUPABASE_ACCESS_TOKEN (secret) and SUPABASE_PROJECT_REF (variable) to deploy the calendar sync function automatically."
       - uses: actions/checkout@v4
         if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != ''
       - uses: supabase/setup-cli@v1
@@ -86,6 +40,3 @@ jobs:
       - name: Deploy sync-calendar
         if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != ''
         run: supabase functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF"
-      - name: Skipped
-        if: env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_PROJECT_REF == ''
-        run: echo "::notice::Set SUPABASE_ACCESS_TOKEN (secret) and SUPABASE_PROJECT_REF (variable) to deploy the calendar sync function automatically."

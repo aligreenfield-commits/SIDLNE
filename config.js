@@ -1,6 +1,5 @@
 // Public Supabase settings for the web app.
-// The deploy workflow overwrites this file using the SUPABASE_URL and
-// SUPABASE_ANON_KEY repository variables. For local development, fill these in.
+// Fill these in from Supabase > Project Settings > API, then commit.
 // The anon key is safe to expose: Row Level Security protects all data.
 window.SIDLNE_CONFIG = {
   supabaseUrl: "",
