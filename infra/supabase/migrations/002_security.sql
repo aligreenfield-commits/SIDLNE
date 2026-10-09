@@ -245,3 +245,6 @@ begin
     end loop;
   end if;
 end $$;
+
+-- Make the API pick up new tables and functions immediately
+notify pgrst, 'reload schema';
