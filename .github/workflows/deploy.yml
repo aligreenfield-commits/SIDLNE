@@ -42,4 +42,12 @@ jobs:
           version: latest
       - name: Deploy sync-calendar
         if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != ''
-        run: supabase functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF"
+        run: |
+          # Tolerate stray spaces or line breaks pasted along with the token
+          SUPABASE_ACCESS_TOKEN="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          export SUPABASE_ACCESS_TOKEN
+          case "$SUPABASE_ACCESS_TOKEN" in
+            sbp_*) ;;
+            *) echo "::error::SUPABASE_ACCESS_TOKEN must be a Supabase personal access token starting with sbp_ (from supabase.com/dashboard/account/tokens)."; exit 1 ;;
+          esac
+          supabase functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF"
