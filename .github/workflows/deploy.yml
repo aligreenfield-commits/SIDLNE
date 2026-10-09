@@ -46,8 +46,11 @@ jobs:
           # Tolerate stray spaces or line breaks pasted along with the token
           SUPABASE_ACCESS_TOKEN="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
           export SUPABASE_ACCESS_TOKEN
-          case "$SUPABASE_ACCESS_TOKEN" in
-            sbp_*) ;;
-            *) echo "::error::SUPABASE_ACCESS_TOKEN must be a Supabase personal access token starting with sbp_ (from supabase.com/dashboard/account/tokens)."; exit 1 ;;
-          esac
+          if ! printf '%s' "$SUPABASE_ACCESS_TOKEN" | grep -Eq '^sbp_[A-Za-z0-9_]{20,}$'; then
+            # Describe the value's shape without revealing it
+            len=${#SUPABASE_ACCESS_TOKEN}
+            odd=$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d 'A-Za-z0-9_' | wc -c)
+            echo "::error::SUPABASE_ACCESS_TOKEN doesn't look like a Supabase token (sbp_ followed by letters and digits). Saved value: $len characters, starts with sbp_: $([ "${SUPABASE_ACCESS_TOKEN#sbp_}" != "$SUPABASE_ACCESS_TOKEN" ] && echo yes || echo no), unexpected characters: $odd. Copy a fresh token from supabase.com/dashboard/account/tokens."
+            exit 1
+          fi
           supabase functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF"
