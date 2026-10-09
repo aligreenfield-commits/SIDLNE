@@ -31,4 +31,7 @@ jobs:
             echo "::error::config.js on sidlne.app is missing the Supabase settings"; fail=1
           fi
           echo "--- DNS ---"; getent hosts sidlne.app || echo "sidlne.app does not resolve"
+          echo "--- Cloudflare Pages project address ---"
+          curl -sS -o /dev/null -w 'https://sidlne.pages.dev -> HTTP %{http_code}\n' --max-time 20 https://sidlne.pages.dev/ || echo "sidlne.pages.dev not reachable"
+          echo "--- Nameservers for sidlne.app ---"; dig +short NS sidlne.app @1.1.1.1 || true
           exit $fail
