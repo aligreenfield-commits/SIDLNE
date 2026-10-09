@@ -36,10 +36,6 @@ jobs:
           exit 0
       - uses: actions/checkout@v4
         if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != ''
-      - uses: supabase/setup-cli@v1
-        if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != ''
-        with:
-          version: latest
       - name: Deploy sync-calendar
         if: env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_PROJECT_REF != ''
         run: |
@@ -53,4 +49,5 @@ jobs:
             echo "::error::SUPABASE_ACCESS_TOKEN doesn't look like a Supabase token (sbp_ followed by letters and digits). Saved value: $len characters, starts with sbp_: $([ "${SUPABASE_ACCESS_TOKEN#sbp_}" != "$SUPABASE_ACCESS_TOKEN" ] && echo yes || echo no), unexpected characters: $odd. Copy a fresh token from supabase.com/dashboard/account/tokens."
             exit 1
           fi
-          supabase functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF"
+          # The npm package avoids setup-cli's rate-limited GitHub API lookup
+          npx --yes supabase@latest functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF" --use-api
