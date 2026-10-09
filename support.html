@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <script>
+    // SIDLNE moved: forward the old github.io address (keeps the page, query and sign-in link hash)
+    if (location.hostname.endsWith('github.io')) location.replace('https://sidlne.app' + location.pathname.replace(/^\/SIDLNE/i, '') + location.search + location.hash);
+  </script>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#171a16">
   <title>Support — SIDLNE</title>
@@ -38,7 +42,7 @@
       <p><strong>I forgot my password.</strong> Use “Forgot password?” on the sign-in screen to get a reset link by email.</p>
       <p><strong>How do I remove someone from my family?</strong> Owners and admins can remove members under <strong>Family → Members</strong>. Reset the invite code too, so the old one stops working.</p>
       <h2>Contact us</h2>
-      <p>Report a problem or request a feature on <a href="https://github.com/aligreenfield-commits/SIDLNE/issues" rel="noopener">GitHub Issues</a>. Please don’t include private family details in public issues.</p>
+      <p>Use the <strong>Forgot password?</strong> link or the steps above for most issues. Family owners and admins can manage members and invite codes under <strong>Family</strong>.</p>
       <p><a href="./">← Back to SIDLNE</a></p>
     </div>
   </main>

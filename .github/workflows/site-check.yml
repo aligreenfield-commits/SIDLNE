@@ -1,0 +1,37 @@
+# Checks that the public site is up and serving the real app.
+name: Site check
+
+on:
+  push:
+    paths:
+      - ".github/workflows/site-check.yml"
+  schedule:
+    - cron: "17 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check https://sidlne.app
+        run: |
+          set -u
+          fail=0
+          for path in / /welcome/ /config.js /icons/share-card.png; do
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' -L --max-time 20 "https://sidlne.app$path" || echo 000)
+            echo "https://sidlne.app$path -> HTTP $code"
+            [ "$code" = 200 ] || fail=1
+          done
+          if grep -q 'reufyrhowxxivpmobouz' <(curl -sS -L --max-time 20 https://sidlne.app/config.js); then
+            echo "config.js points at the SIDLNE Supabase project"
+          else
+            echo "::error::config.js on sidlne.app is missing the Supabase settings"; fail=1
+          fi
+          echo "--- DNS ---"; getent hosts sidlne.app || echo "sidlne.app does not resolve"
+          echo "--- Cloudflare Pages project address ---"
+          curl -sS -o /dev/null -w 'https://sidlne.pages.dev -> HTTP %{http_code}\n' --max-time 20 https://sidlne.pages.dev/ || echo "sidlne.pages.dev not reachable"
+          echo "--- Nameservers for sidlne.app ---"; dig +short NS sidlne.app @1.1.1.1 || true
+          exit $fail
