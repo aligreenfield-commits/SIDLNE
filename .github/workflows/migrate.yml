@@ -1,24 +1,66 @@
-# Applies the database schema in infra/supabase/migrations to Supabase.
-# Migrations are idempotent, so running this again is safe.
+# Applies the SIDLNE database schema to Supabase. Every migration is
+# idempotent, so running this again is safe.
 #
-# Setup: add SUPABASE_DB_URL as a repository secret (Project Settings >
-# Database > Connection string > URI), then run from the Actions tab.
+# Uses SUPABASE_ACCESS_TOKEN (the same secret the function deploy uses) to run
+# infra/supabase/setup.sql through the Supabase Management API. If a
+# SUPABASE_DB_URL secret is set instead, it applies the migrations with psql.
 
-name: Run Supabase migrations
+name: Set up database
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/supabase/**"
+      - ".github/workflows/migrate.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'reufyrhowxxivpmobouz' }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install psql
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply schema with psql
+        if: env.SUPABASE_DB_URL != ''
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          ./infra/scripts/migrate.sh
 
-      - name: Run migrations
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: ./infra/scripts/migrate.sh
+      - name: Apply schema through the Management API
+        if: env.SUPABASE_DB_URL == ''
+        run: |
+          token="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          if [ -z "$token" ]; then
+            echo "::error::Set the SUPABASE_ACCESS_TOKEN (or SUPABASE_DB_URL) repository secret."
+            exit 1
+          fi
+          jq -n --rawfile q infra/supabase/setup.sql '{query: $q}' > body.json
+          status=$(curl -sS -o response.json -w '%{http_code}' \
+            -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" \
+            --data @body.json)
+          echo "HTTP $status"
+          head -c 2000 response.json; echo
+          if [ "$status" -ge 300 ]; then
+            echo "::error::Supabase rejected the schema (HTTP $status). If this is 401/403, the token needs the Database permission."
+            exit 1
+          fi
+
+      - name: Verify tables exist
+        if: env.SUPABASE_DB_URL == ''
+        run: |
+          token="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          curl -sS -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+            --data '{"query":"select table_name from information_schema.tables where table_schema = '\''public'\'' order by 1"}' | tee tables.json
+          echo
+          grep -q '"profiles"' tables.json || { echo "::error::public.profiles is still missing."; exit 1; }
