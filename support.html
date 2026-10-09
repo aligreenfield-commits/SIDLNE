@@ -3,22 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SIDLNE Support</title>
+  <meta name="theme-color" content="#171a16">
+  <title>Support — SIDLNE</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23171a16'/%3E%3Cpath d='M43 18H26c-7 0-10 10-3 13l14 6c4 2 2 9-3 9H17' fill='none' stroke='%23c5f65a' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
   <style>
-    body { font-family: system-ui, sans-serif; background: #f6f7f3; color: #171a16; margin: 0; }
-    main { max-width: 800px; margin: 72px auto; padding: 24px; }
-    .card { background: #fff; border: 1px solid #dfe4d8; border-radius: 18px; padding: 28px; }
-    h1 { margin-top: 0; font-size: clamp(2rem, 4vw, 2.6rem); letter-spacing: -0.06em; }
-    p { color: #58654c; line-height: 1.7; }
+    body { font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f6f7f3; color: #171a16; margin: 0; }
+    main { max-width: 760px; margin: 56px auto; padding: 0 16px; }
+    .brand { font-size: 22px; font-weight: 900; font-style: italic; letter-spacing: -1.5px; margin-bottom: 18px; display: inline-block; color: inherit; text-decoration: none; }
+    .brand b { color: #6f9a25; }
+    .card { background: #fff; border: 1px solid #dfe4d8; border-radius: 18px; padding: 28px; box-shadow: 0 16px 50px rgba(23,26,22,0.06); }
+    h1 { margin-top: 0; font-size: clamp(2rem, 4vw, 2.6rem); letter-spacing: -0.05em; }
+    h2 { font-size: 18px; margin: 26px 0 6px; }
+    p, li { line-height: 1.7; color: #4f5a46; }
     a { color: #566d3e; font-weight: 700; }
+    small { color: #71796d; }
   </style>
 </head>
 <body>
   <main>
+    <a class="brand" href="./">SIDLNE<b>/</b></a>
     <div class="card">
       <h1>Support</h1>
-      <p>This repository is a demo frontend for the SIDLNE concept. For product or technical support, use the GitHub repository issues or contact the project owner.</p>
-      <p><a href="/">Back to SIDLNE</a></p>
+      <h2>Getting started</h2>
+      <ol>
+        <li>Create an account and start a family.</li>
+        <li>Add your athletes and their teams under <strong>Teams</strong>.</li>
+        <li>Paste each team’s calendar link (from TeamSnap, SportsEngine, LeagueApps, GameChanger and others) to import its schedule.</li>
+        <li>Share your invite code from <strong>Family</strong> so co-parents and carpool partners can join.</li>
+      </ol>
+      <h2>Common questions</h2>
+      <p><strong>My team calendar won’t import.</strong> Make sure the link is the calendar’s subscribe or iCal link (it usually ends in <code>.ics</code> or starts with <code>webcal://</code>), not the web page you view the schedule on. Then press <strong>Sync now</strong> on the team.</p>
+      <p><strong>A game changed but SIDLNE shows the old time.</strong> Press <strong>Sync now</strong> on the team to pull the latest schedule.</p>
+      <p><strong>I forgot my password.</strong> Use “Forgot password?” on the sign-in screen to get a reset link by email.</p>
+      <p><strong>How do I remove someone from my family?</strong> Owners and admins can remove members under <strong>Family → Members</strong>. Reset the invite code too, so the old one stops working.</p>
+      <h2>Contact us</h2>
+      <p>Report a problem or request a feature on <a href="https://github.com/aligreenfield-commits/SIDLNE/issues" rel="noopener">GitHub Issues</a>. Please don’t include private family details in public issues.</p>
+      <p><a href="./">← Back to SIDLNE</a></p>
     </div>
   </main>
 </body>

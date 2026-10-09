@@ -1,8 +1,6 @@
-export default `
-# .gitignore
-.next
 node_modules
-out
-npm-debug.log*
 .DS_Store
-`;
+.env
+.env.local
+supabase/.temp
+supabase/.branches
