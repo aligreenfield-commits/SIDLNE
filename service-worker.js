@@ -1,7 +1,7 @@
 // Caches the app shell so SIDLNE opens instantly and works on flaky
 // connections. Data always comes from Supabase over the network.
-const CACHE_NAME = 'sidlne-v2';
-const SHELL = ['./', './index.html', './config.js', './assets/app.js', './assets/styles.css', './manifest.webmanifest', './icons/apple-touch-icon.png'];
+const CACHE_NAME = 'sidlne-v3';
+const SHELL = ['./', './index.html', './config.js', './assets/app.js', './assets/styles.css', './manifest.webmanifest', './icons/apple-touch-icon.png', './icons/icon-32.png', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)));
