@@ -4,3 +4,4 @@ node_modules
 .env.local
 supabase/.temp
 supabase/.branches
+.wrangler

@@ -1,0 +1,12 @@
+# Files that are not part of the public website
+.git
+.github
+.gitignore
+.assetsignore
+wrangler.jsonc
+node_modules
+infra
+mobile
+supabase
+README.md
+.wrangler
