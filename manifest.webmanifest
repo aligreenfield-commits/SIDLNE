@@ -1,17 +1,19 @@
 {
-  "name": "SIDLNE Demo",
+  "name": "SIDLNE — Family Sports Calendar",
   "short_name": "SIDLNE",
-  "description": "A public, privacy-safe demo of SIDLNE—the family sports calendar.",
-  "start_url": "/",
+  "description": "Every practice, game and ride for every kid, in one shared family calendar.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f6f7f3",
   "theme_color": "#171a16",
   "icons": [
     {
-      "src": "/icons/apple-touch-icon.png",
+      "src": "icons/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
