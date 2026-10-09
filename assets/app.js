@@ -200,6 +200,7 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   const join = params.get('join');
   if (join) { try { sessionStorage.setItem('sidlne-join', join.toUpperCase()); } catch {} }
+  if (params.has('signup')) state.authMode = 'signup'; // "Get started" links from the landing page
 
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'PASSWORD_RECOVERY') { state.recovering = true; state.session = session; renderAuth(); return; }
@@ -266,7 +267,7 @@ function renderAuth() {
     reset: `<span class="eyebrow">RESET PASSWORD</span><h2>Choose a new password</h2>
       <form class="form" data-form="reset"><label>New password<input name="password" type="password" autocomplete="new-password" required minlength="8"></label><button class="primary full" type="submit">Save password</button></form>`,
   };
-  root.innerHTML = `<div class="auth-wrap">${authHero()}<div class="auth-card">${forms[mode]}<div class="auth-foot"><a href="privacy.html">Privacy</a> · <a href="support.html">Support</a> · <a href="install.html">Install on your phone</a></div></div></div>`;
+  root.innerHTML = `<div class="auth-wrap">${authHero()}<div class="auth-card">${forms[mode]}<div class="auth-foot"><a href="welcome/">About SIDLNE</a> · <a href="privacy.html">Privacy</a> · <a href="support.html">Support</a> · <a href="install.html">Install on your phone</a></div></div></div>`;
 }
 
 function renderOnboarding() {
