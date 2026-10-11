@@ -51,5 +51,14 @@ attempts.each do |label, claims|
   exit 0
 end
 
+# Find out which key this text really belongs to: try the account's other Key IDs (labels, not secrets)
+OTHER_KEY_IDS = %w[LRKVQL52JP 48A56P8KG8 2797G58G9M AZFWPW7W2P R8ZB3QUZY5] - [key_id]
+OTHER_KEY_IDS.each do |other|
+  res = get(token(key, other, { iss: issuer }))
+  next unless res.code == "200"
+  puts "::error::The text in APP_STORE_CONNECT_KEY belongs to key #{other}, not #{key_id}. Use the text of AuthKey_#{key_id}.p8, or set the Key ID to #{other} if that key has Admin access."
+  exit 1
+end
+
 puts "::error::Apple rejected API key #{key_id} every way (401). The text in APP_STORE_CONNECT_KEY is not from AuthKey_#{key_id}.p8, or key #{key_id} was revoked."
 exit 1
