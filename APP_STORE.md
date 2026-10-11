@@ -22,7 +22,7 @@ https://appstoreconnect.apple.com → **Apps** → **＋** → **New App**
 | Field | Value |
 |---|---|
 | Platform | iOS |
-| Name | SIDLNE: Family Sports Calendar |
+| Name | SIDLNE |
 | Primary language | English (U.S.) |
 | Bundle ID | `com.gmail.sidlne`. It must match the Xcode project exactly. If it isn't listed, register it under developer.apple.com → Identifiers → ＋ → App IDs. |
 | SKU | `sidlne-ios` |
