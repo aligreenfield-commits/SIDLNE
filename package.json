@@ -1,0 +1,20 @@
+{
+  "name": "sidlne",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SIDLNE: every sport, one place. Web app and iOS wrapper.",
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "ios:sync": "npm run build:web && cap sync ios",
+    "ios:open": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/local-notifications": "8.3.1",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

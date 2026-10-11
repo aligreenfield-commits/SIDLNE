@@ -5,3 +5,7 @@ node_modules
 supabase/.temp
 supabase/.branches
 .wrangler
+www
+ios/App/App/public
+ios/App/Pods
+ios/DerivedData

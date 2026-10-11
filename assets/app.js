@@ -10,6 +10,11 @@ const COLORS = ['#9a78bf', '#6e9bc8', '#e0864e', '#4fa37a', '#d2668f', '#c9a23a'
 const SPORTS = ['Baseball', 'Basketball', 'Cheer', 'Dance', 'Football', 'Gymnastics', 'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Swimming', 'Tennis', 'Track', 'Volleyball', 'Wrestling', 'Other'];
 const SPORT_ICONS = { Baseball: '⚾', Basketball: '🏀', Football: '🏈', Hockey: '🏒', Lacrosse: '🥍', Soccer: '⚽', Softball: '🥎', Swimming: '🏊', Tennis: '🎾', Volleyball: '🏐', Gymnastics: '🤸', Track: '🏃', Wrestling: '🤼', Cheer: '📣', Dance: '💃' };
 const HOUSEHOLD_KEY = 'sidlne-household';
+// Running inside the iPhone app (Capacitor) rather than a browser
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const Plugins = window.Capacitor?.Plugins || {};
+// Links that leave the app (emails, invites) must point at the public site
+const PUBLIC_URL = NATIVE ? 'https://sidlne.app/' : location.origin + location.pathname;
 
 const supabase = config.supabaseUrl && config.supabaseAnonKey
   ? createClient(config.supabaseUrl, config.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } })
@@ -156,6 +161,7 @@ async function loadHouseholdData() {
   state.events = must(events);
   state.rides = must(rides);
   state.messages = must(messages).reverse();
+  scheduleReminders();
 }
 
 async function reload(...tables) {
@@ -171,6 +177,7 @@ async function reload(...tables) {
     messages: async () => { state.messages = must(await supabase.from('messages').select('*').eq('household_id', hid).order('inserted_at', { ascending: false }).limit(200)).reverse(); },
   };
   await Promise.all(tables.map((t) => jobs[t]()));
+  if (tables.includes('events')) scheduleReminders();
 }
 
 function subscribe() {
@@ -317,7 +324,7 @@ function installTip() {
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   let dismissed = false;
   try { dismissed = localStorage.getItem('sidlne-install-dismissed') === '1'; } catch {}
-  if (!ios || standalone || dismissed) return '';
+  if (NATIVE || !ios || standalone || dismissed) return '';
   return '<div class="install" id="installTip"><div><b>Add SIDLNE to your Home Screen</b><p>Tap Share, then “Add to Home Screen.”</p></div><button class="x" data-action="dismiss-install" aria-label="Dismiss">×</button></div>';
 }
 
@@ -605,10 +612,80 @@ function scrollChat() {
 }
 
 // ---------------------------------------------------------------------------
+// Game reminders (iPhone app only): a local notification 1 hour before events
+// ---------------------------------------------------------------------------
+const REMINDERS_KEY = 'sidlne-reminders';
+const REMINDER_LEAD_MS = 60 * 60 * 1000;
+const MAX_REMINDERS = 60; // iOS keeps at most 64 pending local notifications
+
+function remindersOn() {
+  try { return localStorage.getItem(REMINDERS_KEY) === '1'; } catch { return false; }
+}
+
+// Stable 31-bit id per event so rescheduling replaces rather than duplicates
+function reminderId(eventId) {
+  let h = 0;
+  for (const c of String(eventId)) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return Math.abs(h) || 1;
+}
+
+async function scheduleReminders() {
+  const LN = Plugins.LocalNotifications;
+  if (!NATIVE || !LN || !remindersOn()) return;
+  try {
+    const pending = await LN.getPending();
+    if (pending.notifications.length) await LN.cancel({ notifications: pending.notifications.map((n) => ({ id: n.id })) });
+    const now = Date.now();
+    const soon = state.events
+      .filter((e) => { const at = new Date(e.start).getTime() - REMINDER_LEAD_MS; return at > now && at < now + 14 * DAY; })
+      .slice(0, MAX_REMINDERS);
+    if (!soon.length) return;
+    await LN.schedule({
+      notifications: soon.map((e) => {
+        const who = athleteOf(e)?.name;
+        return {
+          id: reminderId(e.id),
+          title: `${who ? who + ': ' : ''}${e.title} in 1 hour`,
+          body: [fmtTime(e.start), e.location].filter(Boolean).join(' · '),
+          schedule: { at: new Date(new Date(e.start).getTime() - REMINDER_LEAD_MS) },
+          extra: { eventId: e.id },
+        };
+      }),
+    });
+  } catch (err) { console.error('Could not schedule reminders', err); }
+}
+
+async function setReminders(on) {
+  const LN = Plugins.LocalNotifications;
+  if (!LN) return;
+  if (on) {
+    const perm = await LN.requestPermissions();
+    if (perm.display !== 'granted') { toast('Turn on notifications for SIDLNE in iPhone Settings first.'); return; }
+    try { localStorage.setItem(REMINDERS_KEY, '1'); } catch {}
+    await scheduleReminders();
+    toast('Reminders on: you’ll get a heads-up 1 hour before each event');
+  } else {
+    try { localStorage.removeItem(REMINDERS_KEY); } catch {}
+    const pending = await LN.getPending();
+    if (pending.notifications.length) await LN.cancel({ notifications: pending.notifications.map((n) => ({ id: n.id })) });
+    toast('Reminders off');
+  }
+  renderMain();
+}
+
+if (NATIVE && Plugins.LocalNotifications) {
+  // Tapping a reminder opens that event
+  Plugins.LocalNotifications.addListener('localNotificationActionPerformed', ({ notification }) => {
+    const id = notification?.extra?.eventId;
+    if (id && state.household) { go('Calendar'); openEvent(id); }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Family settings
 // ---------------------------------------------------------------------------
 function inviteLink() {
-  return `${location.origin}${location.pathname}?join=${encodeURIComponent(state.household.invite_code)}`;
+  return `${PUBLIC_URL}?join=${encodeURIComponent(state.household.invite_code)}`;
 }
 
 function familyHTML() {
@@ -627,6 +704,7 @@ function familyHTML() {
       ${others.length ? `<p style="margin-top:14px">Switch to:</p>${others.map((m) => `<button class="outline" style="margin:0 6px 6px 0" data-action="switch-household" data-id="${m.household_id}">${esc(m.households.name)}</button>`).join('')}` : ''}
       <div class="row-actions"><button class="link-btn" data-action="new-household">＋ Create or join another family</button></div>
       <div class="row-actions">${state.role === 'owner' ? '<button class="danger-btn" data-action="delete-household">Delete family</button>' : '<button class="danger-btn" data-action="leave-household">Leave family</button>'}</div></div>
+    ${NATIVE && Plugins.LocalNotifications ? `<div class="rail-card"><h2>Game reminders</h2><p>Get a notification 1 hour before every practice and game on this phone.</p><button class="${remindersOn() ? 'outline' : 'primary'}" data-action="toggle-reminders">${remindersOn() ? 'Turn off reminders' : '🔔 Turn on reminders'}</button></div>` : ''}
     <div class="rail-card"><h2>Account</h2><p>Permanently delete your account and personal data. Families you own are deleted too.</p><button class="danger-btn" data-action="delete-account">Delete my account</button></div>
   </aside></div>`;
 }
@@ -680,8 +758,11 @@ const actions = {
   },
   'sync-team': async (el) => { el.disabled = true; el.textContent = 'Syncing…'; await busy(null, () => syncTeam(el.dataset.id)); if (el.isConnected) { el.disabled = false; el.textContent = 'Sync now'; } },
   invite: () => go('Family'),
+  'toggle-reminders': () => busy(null, () => setReminders(!remindersOn())),
   'share-invite': async () => {
     const url = inviteLink();
+    const text = `Join ${state.household.name} on SIDLNE. Invite code: ${state.household.invite_code}`;
+    if (Plugins.Share) { try { await Plugins.Share.share({ title: 'Join our family on SIDLNE', text, url, dialogTitle: 'Invite to SIDLNE' }); } catch {} return; }
     if (navigator.share) { try { await navigator.share({ title: 'Join our family on SIDLNE', text: `Join ${state.household.name} on SIDLNE. Invite code: ${state.household.invite_code}`, url }); } catch {} }
     else copyText(url);
   },
@@ -718,12 +799,12 @@ const forms = {
     await enter();
   },
   signup: async (f, form) => {
-    const res = must(await supabase.auth.signUp({ email: f.get('email').trim(), password: f.get('password'), options: { data: { display_name: f.get('name').trim() }, emailRedirectTo: location.origin + location.pathname } }));
+    const res = must(await supabase.auth.signUp({ email: f.get('email').trim(), password: f.get('password'), options: { data: { display_name: f.get('name').trim() }, emailRedirectTo: PUBLIC_URL } }));
     if (res.session) { state.session = res.session; await enter(); }
     else form.outerHTML = '<div class="success"><strong>Check your email.</strong> Tap the confirmation link we sent, then come back and sign in.</div>';
   },
   forgot: async (f, form) => {
-    must(await supabase.auth.resetPasswordForEmail(f.get('email').trim(), { redirectTo: location.origin + location.pathname }));
+    must(await supabase.auth.resetPasswordForEmail(f.get('email').trim(), { redirectTo: PUBLIC_URL }));
     form.outerHTML = '<div class="success">If an account exists for that email, a reset link is on its way.</div>';
   },
   reset: async (f) => {
@@ -853,6 +934,6 @@ document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeMod
 window.addEventListener('online', () => { document.getElementById('live')?.classList.remove('hidden'); if (state.household) reload('events', 'rides', 'messages').then(renderMain).catch(() => {}); });
 window.addEventListener('offline', () => { toast('You’re offline. Changes will fail until you reconnect.'); });
 
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(() => {}));
+if (!NATIVE && 'serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(() => {}));
 
 boot();
