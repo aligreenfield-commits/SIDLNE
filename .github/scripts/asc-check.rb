@@ -10,6 +10,9 @@ key_path, key_id, issuer = ARGV
 def b64(s) = Base64.urlsafe_encode64(s, padding: false)
 
 key = OpenSSL::PKey::EC.new(File.read(key_path))
+# A public fingerprint (safe to show) so you can tell whether the saved key changed between runs
+pub = OpenSSL::PKey::EC.new(key.public_to_der)
+puts "Key fingerprint: #{OpenSSL::Digest::SHA256.hexdigest(pub.to_der)[0, 12]}"
 # The team's Issuer ID (shown above the Team Keys list; an identifier, not a secret)
 KNOWN_ISSUER = "df23b593-b9db-4995-a523-a07b45cde228"
 
