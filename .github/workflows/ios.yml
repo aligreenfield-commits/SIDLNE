@@ -89,7 +89,17 @@ jobs:
           missing=()
           [ -n "$ASC_KEY_ID" ] || missing+=(APP_STORE_CONNECT_KEY_ID)
           [ -n "$ASC_ISSUER_ID" ] || missing+=(APP_STORE_CONNECT_ISSUER_ID)
-          case "$ASC_KEY" in *"BEGIN PRIVATE KEY"*) ;; *) missing+=("APP_STORE_CONNECT_KEY (must be the whole .p8 file, including the BEGIN/END lines)") ;; esac
+          # Accept the .p8 text with or without its BEGIN/END lines (easy to miss when copying on a phone)
+          KEY_BODY="$(printf '%s' "$ASC_KEY" | tr -d '[:space:]')"
+          case "$ASC_KEY" in
+            *"BEGIN PRIVATE KEY"*) ;;
+            *)
+              if [ "${#KEY_BODY}" -ge 100 ] && [[ "$KEY_BODY" =~ ^[A-Za-z0-9+/=]+$ ]]; then
+                ASC_KEY="$(printf -- '-----BEGIN PRIVATE KEY-----\n%s\n-----END PRIVATE KEY-----\n' "$(printf '%s' "$KEY_BODY" | fold -w 64)")"
+              else
+                missing+=("APP_STORE_CONNECT_KEY (should be the text of the .p8 file, about 200 characters; this one is ${#KEY_BODY})")
+              fi ;;
+          esac
           if [ ${#missing[@]} -gt 0 ]; then
             for m in "${missing[@]}"; do echo "::error::Missing or empty: $m (Settings > Secrets and variables > Actions)"; done
             exit 1
