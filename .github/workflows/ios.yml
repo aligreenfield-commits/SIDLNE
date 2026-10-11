@@ -90,16 +90,14 @@ jobs:
           set -euo pipefail
           # Name every missing setting up front instead of failing deep inside xcodebuild
           missing=()
-          # If the key text was saved in the Key ID setting by mistake, use it from there
-          case "$ASC_KEY" in *"BEGIN PRIVATE KEY"*) ;; *)
-            case "$ASC_KEY_ID" in *"BEGIN PRIVATE KEY"*) ASC_KEY="$ASC_KEY_ID" ;; esac ;;
-          esac
           ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
           # The Key ID written in this file wins; the setting is only a fallback
           if [ -n "$DEFAULT_ASC_KEY_ID" ]; then ASC_KEY_ID="$DEFAULT_ASC_KEY_ID"; fi
           [ -n "$ASC_ISSUER_ID" ] || missing+=(APP_STORE_CONNECT_ISSUER_ID)
           # Accept the .p8 text with or without its BEGIN/END lines (easy to miss when copying on a phone)
           KEY_BODY="$(printf '%s' "$ASC_KEY" | tr -d '[:space:]')"
+          case "$ASC_KEY" in *"BEGIN PRIVATE KEY"*) has_begin=yes ;; *) has_begin=no ;; esac
+          echo "Key text from APP_STORE_CONNECT_KEY: ${#KEY_BODY} characters, BEGIN line: $has_begin"
           case "$ASC_KEY" in
             *"BEGIN PRIVATE KEY"*) ;;
             *)
