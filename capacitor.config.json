@@ -1,0 +1,15 @@
+{
+  "appId": "app.sidlne",
+  "appName": "SIDLNE",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#171a16",
+    "scheme": "SIDLNE"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#c5f65a"
+    }
+  }
+}

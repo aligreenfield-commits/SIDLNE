@@ -1,0 +1,127 @@
+# Builds the SIDLNE iPhone app on a GitHub-hosted Mac.
+#
+# Every run compiles the app for the iOS Simulator (no Apple account needed),
+# so a broken native project shows up as a red check.
+#
+# When the App Store Connect secrets below are set, a push to main (or a manual
+# run) also archives, signs and uploads a build to TestFlight / App Store Connect.
+#
+# Secrets (Settings > Secrets and variables > Actions > Secrets):
+#   APPLE_TEAM_ID                 10-character Team ID (developer.apple.com > Membership)
+#   APP_STORE_CONNECT_KEY_ID      App Store Connect API key ID
+#   APP_STORE_CONNECT_ISSUER_ID   API key issuer ID
+#   APP_STORE_CONNECT_KEY         Contents of the AuthKey_XXXX.p8 file
+# See APP_STORE.md for how to create them.
+
+name: iOS app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - "assets/**"
+      - "index.html"
+      - "config.js"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.json"
+      - "scripts/build-web.mjs"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.json"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install and copy the web app into the iOS project
+        run: |
+          npm ci
+          npm run ios:sync
+
+      - name: Show Xcode version and schemes
+        run: |
+          xcodebuild -version
+          xcodebuild -list -project ios/App/App.xcodeproj
+
+      - name: Compile for the iOS Simulator (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO | tail -40
+
+      - name: Archive, sign and upload to App Store Connect
+        if: github.event_name != 'pull_request' && env.ASC_KEY != '' && env.APPLE_TEAM_ID != ''
+        run: |
+          set -euo pipefail
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s' "$ASC_KEY" > "$KEY_PATH"
+          AUTH=(-allowProvisioningUpdates
+                -authenticationKeyPath "$KEY_PATH"
+                -authenticationKeyID "$ASC_KEY_ID"
+                -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+
+          # Build numbers must increase with every upload
+          BUILD_NUMBER=$(( 100 + GITHUB_RUN_NUMBER ))
+
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/SIDLNE.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            "${AUTH[@]}" | tail -40
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/SIDLNE.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            "${AUTH[@]}"
+
+          echo "::notice::Uploaded build $BUILD_NUMBER to App Store Connect. It appears in TestFlight after Apple finishes processing (about 10-30 minutes)."
+
+      - name: Upload skipped
+        if: github.event_name != 'pull_request' && (env.ASC_KEY == '' || env.APPLE_TEAM_ID == '')
+        run: echo "::notice::The app compiled. Add the App Store Connect secrets (see APP_STORE.md) to upload builds to TestFlight."

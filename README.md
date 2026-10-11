@@ -22,7 +22,8 @@
 | Web app | `index.html`, `assets/`, `config.js` | Static files with no build step. GitHub Pages serves them from `main`. |
 | Database | `infra/supabase/migrations/` | Postgres schema, RLS policies and RPCs. Idempotent, so it's safe to re-run. |
 | Calendar sync | `supabase/functions/sync-calendar/` | Supabase Edge Function (Deno) that downloads and parses iCal feeds. |
-| Mobile app | `mobile/` | Expo / React Native app that uses the same Supabase backend. |
+| iPhone app | `ios/`, `capacitor.config.json` | Capacitor wrapper around the web app, with game reminders and the native share sheet. Built in the cloud by `.github/workflows/ios.yml`. See [APP_STORE.md](APP_STORE.md). |
+| Expo app (legacy) | `mobile/` | Early prototype, replaced by `ios/`. |
 
 ## Deploy
 

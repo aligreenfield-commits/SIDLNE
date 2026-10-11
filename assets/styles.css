@@ -294,3 +294,6 @@ a.directions,a.directions:visited{color:var(--ink)}
 .next-actions{margin-top:14px;position:relative;z-index:1}
 .next-actions .primary{padding:10px 14px;font-size:13px}
 @media(max-width:700px){.list-row a.directions{margin-left:50px}}
+/* iPhone notch / home indicator (iOS app and Home Screen web app) */
+@media(max-width:700px){.topbar{height:calc(62px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}}
+.auth-wrap,.boot{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
