@@ -53,6 +53,9 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       # Key ID and Issuer ID aren't secret, so either a secret or a variable works
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
+      # Key ID of the App Store Connect API key (not secret). Used when the setting above
+      # is empty or isn't a Key ID. Update it if you replace the key.
+      DEFAULT_ASC_KEY_ID: 48A56P8KG8
       ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
       ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
     steps:
@@ -87,7 +90,12 @@ jobs:
           set -euo pipefail
           # Name every missing setting up front instead of failing deep inside xcodebuild
           missing=()
-          [ -n "$ASC_KEY_ID" ] || missing+=(APP_STORE_CONNECT_KEY_ID)
+          # If the key text was saved in the Key ID setting by mistake, use it from there
+          case "$ASC_KEY" in *"BEGIN PRIVATE KEY"*) ;; *)
+            case "$ASC_KEY_ID" in *"BEGIN PRIVATE KEY"*) ASC_KEY="$ASC_KEY_ID" ;; esac ;;
+          esac
+          ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
+          [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || ASC_KEY_ID="$DEFAULT_ASC_KEY_ID"
           [ -n "$ASC_ISSUER_ID" ] || missing+=(APP_STORE_CONNECT_ISSUER_ID)
           # Accept the .p8 text with or without its BEGIN/END lines (easy to miss when copying on a phone)
           KEY_BODY="$(printf '%s' "$ASC_KEY" | tr -d '[:space:]')"
@@ -102,11 +110,6 @@ jobs:
           esac
           if [ ${#missing[@]} -gt 0 ]; then
             for m in "${missing[@]}"; do echo "::error::Missing or empty: $m (Settings > Secrets and variables > Actions)"; done
-            exit 1
-          fi
-          ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
-          if ! [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]]; then
-            echo "::error::APP_STORE_CONNECT_KEY_ID must be the 10-character Key ID (like AB12CD34EF), not the key text. This one is ${#ASC_KEY_ID} characters."
             exit 1
           fi
           ASC_ISSUER_ID="$(printf '%s' "$ASC_ISSUER_ID" | tr -d '[:space:]')"
