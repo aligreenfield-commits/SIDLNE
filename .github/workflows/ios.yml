@@ -56,6 +56,8 @@ jobs:
       # Key ID of the App Store Connect API key (not secret). Takes priority over the
       # setting above. Update it if you replace the key.
       DEFAULT_ASC_KEY_ID: LRKVQL52JP
+      # Apple Developer Team ID (developer.apple.com > Account > Membership; not secret)
+      DEFAULT_TEAM_ID: V3LQXRMUDZ
       ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
       ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
     steps:
@@ -113,6 +115,10 @@ jobs:
           fi
           ASC_ISSUER_ID="$(printf '%s' "$ASC_ISSUER_ID" | tr -d '[:space:]')"
           APPLE_TEAM_ID="$(printf '%s' "$APPLE_TEAM_ID" | tr -d '[:space:]')"
+          if [ "$APPLE_TEAM_ID" != "$DEFAULT_TEAM_ID" ]; then
+            echo "::warning::APPLE_TEAM_ID setting doesn't match the Team ID in ios.yml; using $DEFAULT_TEAM_ID"
+            APPLE_TEAM_ID="$DEFAULT_TEAM_ID"
+          fi
           KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
           printf '%s' "$ASC_KEY" > "$KEY_PATH"
           # Check the key with Apple first, so a wrong key gets a clear message
