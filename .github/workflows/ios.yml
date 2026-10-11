@@ -116,6 +116,9 @@ jobs:
           APPLE_TEAM_ID="$(printf '%s' "$APPLE_TEAM_ID" | tr -d '[:space:]')"
           KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
           printf '%s' "$ASC_KEY" > "$KEY_PATH"
+          # Check the key with Apple first, so a wrong key gets a clear message
+          ruby .github/scripts/asc-check.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID"
+
           AUTH=(-allowProvisioningUpdates
                 -authenticationKeyPath "$KEY_PATH"
                 -authenticationKeyID "$ASC_KEY_ID"
