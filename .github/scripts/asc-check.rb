@@ -38,6 +38,8 @@ attempts << ["individual key", { sub: "user" }]
 attempts.each do |label, claims|
   res = get(token(key, key_id, claims))
   puts "#{label}: HTTP #{res.code}"
+  # Apple's error explains the rejection (no secrets in it)
+  puts "  Apple says: #{res.body.to_s.gsub(/\s+/, " ")[0, 400]}" unless res.code == "200"
   next unless res.code == "200"
   apps = JSON.parse(res.body)["data"] || []
   puts "Apple accepted API key #{key_id} (#{label})."
