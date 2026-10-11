@@ -10,27 +10,43 @@ key_path, key_id, issuer = ARGV
 def b64(s) = Base64.urlsafe_encode64(s, padding: false)
 
 key = OpenSSL::PKey::EC.new(File.read(key_path))
-header = b64({ alg: "ES256", kid: key_id, typ: "JWT" }.to_json)
-now = Time.now.to_i
-payload = b64({ iss: issuer, iat: now, exp: now + 600, aud: "appstoreconnect-v1" }.to_json)
-der = key.sign(OpenSSL::Digest.new("SHA256"), "#{header}.#{payload}")
-r, s = OpenSSL::ASN1.decode(der).value.map { |v| v.value.to_s(2).rjust(32, "\0") }
-token = "#{header}.#{payload}.#{b64(r + s)}"
+# The team's Issuer ID (shown above the Team Keys list; an identifier, not a secret)
+KNOWN_ISSUER = "df23b593-b9db-4995-a523-a07b45cde228"
 
-uri = URI("https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=com.gmail.sidlne&limit=1")
-res = Net::HTTP.start(uri.host, uri.port, use_ssl: true) do |http|
-  http.get(uri, "Authorization" => "Bearer #{token}")
+def token(key, key_id, claims)
+  header = b64({ alg: "ES256", kid: key_id, typ: "JWT" }.to_json)
+  now = Time.now.to_i
+  payload = b64(claims.merge(iat: now, exp: now + 600, aud: "appstoreconnect-v1").to_json)
+  der = key.sign(OpenSSL::Digest.new("SHA256"), "#{header}.#{payload}")
+  r, s = OpenSSL::ASN1.decode(der).value.map { |v| v.value.to_s(2).rjust(32, "\0") }
+  "#{header}.#{payload}.#{b64(r + s)}"
 end
 
-case res.code
-when "200"
+def get(tok)
+  uri = URI("https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=com.gmail.sidlne&limit=1")
+  Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |h| h.get(uri, "Authorization" => "Bearer #{tok}") }
+end
+
+# Team key with the configured Issuer ID, team key with the known Issuer ID, then individual key
+attempts = [["team key, configured Issuer ID", { iss: issuer }]]
+attempts << ["team key, known Issuer ID", { iss: KNOWN_ISSUER }] if issuer != KNOWN_ISSUER
+attempts << ["individual key", { sub: "user" }]
+
+attempts.each do |label, claims|
+  res = get(token(key, key_id, claims))
+  puts "#{label}: HTTP #{res.code}"
+  next unless res.code == "200"
   apps = JSON.parse(res.body)["data"] || []
-  puts "Apple accepted API key #{key_id}."
+  puts "Apple accepted API key #{key_id} (#{label})."
   puts apps.empty? ? "::warning::No app with bundle ID com.gmail.sidlne in App Store Connect yet." : "Found the SIDLNE app record."
-when "401"
-  puts "::error::Apple rejected API key #{key_id} (401). The key text in APP_STORE_CONNECT_KEY is not from AuthKey_#{key_id}.p8, or that key was revoked, or the Issuer ID is wrong."
-  exit 1
-else
-  puts "::error::App Store Connect API returned #{res.code}: #{res.body[0, 300]}"
-  exit 1
+  if label.start_with?("individual")
+    puts "::error::Key #{key_id} is an Individual key. Xcode signing needs a Team key with Admin access (App Store Connect > Integrations > Team Keys)."
+    exit 1
+  end
+  puts "::warning::The APP_STORE_CONNECT_ISSUER_ID setting is wrong; using the team's Issuer ID instead." if claims[:iss] != issuer
+  File.write("#{key_path}.issuer", claims[:iss]) # the Issuer ID that worked, for xcodebuild
+  exit 0
 end
+
+puts "::error::Apple rejected API key #{key_id} every way (401). The text in APP_STORE_CONNECT_KEY is not from AuthKey_#{key_id}.p8, or key #{key_id} was revoked."
+exit 1
