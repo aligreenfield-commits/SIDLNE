@@ -76,6 +76,11 @@ function memberName(id) {
   const m = state.members.find((x) => x.profile_id === id);
   return m?.profiles?.display_name || m?.profiles?.email || 'Family member';
 }
+// Waze universal link: opens the Waze app if installed, otherwise waze.com, and starts navigation
+function wazeUrl(location) { return `https://waze.com/ul?q=${encodeURIComponent(location)}&navigate=yes`; }
+function directionsButton(location, cls = 'outline') {
+  return location ? `<a class="${cls} directions" href="${esc(wazeUrl(location))}" target="_blank" rel="noopener">🧭 Get directions</a>` : '';
+}
 function friendlyError(err) {
   const msg = err?.message || String(err);
   if (/Failed to fetch|NetworkError/i.test(msg)) return 'Can’t reach the server. Check your connection and try again.';
@@ -372,7 +377,7 @@ function overviewHTML() {
   const synced = state.teams.filter((t) => t.calendar_url).length;
 
   const hero = `<div class="grid-top"><div class="next"><span class="eyebrow">UP NEXT</span>${next
-    ? `<h2>${esc(next.title)}</h2><p>◷ ${esc(fmtDate(next.start))} · ${esc(fmtTime(next.start))}${athleteOf(next) ? ' · ' + esc(athleteOf(next).name) : ''}</p>${next.location ? `<p>⌖ ${esc(next.location)}</p>` : ''}<span class="pill ride-chip ${nextRide?.driver_profile_id ? 'ok' : 'warn'}">${nextRide?.driver_profile_id ? `🚗 ${esc(memberName(nextRide.driver_profile_id))} driving` : 'NEEDS A DRIVER'}</span>`
+    ? `<h2>${esc(next.title)}</h2><p>◷ ${esc(fmtDate(next.start))} · ${esc(fmtTime(next.start))}${athleteOf(next) ? ' · ' + esc(athleteOf(next).name) : ''}</p>${next.location ? `<p>⌖ ${esc(next.location)}</p>` : ''}<span class="pill ride-chip ${nextRide?.driver_profile_id ? 'ok' : 'warn'}">${nextRide?.driver_profile_id ? `🚗 ${esc(memberName(nextRide.driver_profile_id))} driving` : 'NEEDS A DRIVER'}</span>${next.location ? `<div class="next-actions">${directionsButton(next.location, 'primary')}</div>` : ''}`
     : '<h2>Your next play starts here.</h2><p>Add an event or connect a team calendar to fill your lineup.</p>'}<span class="ghost">S/</span></div>
     <div class="stat"><span class="eyebrow">NEXT 7 DAYS</span><strong>${week.length}</strong><p>${week.length === 1 ? 'event' : 'events'}<br>in the lineup</p><small>${state.athletes.length} ${state.athletes.length === 1 ? 'athlete' : 'athletes'} · ${teamCount} ${teamCount === 1 ? 'team' : 'teams'}</small></div></div>`;
 
@@ -531,8 +536,9 @@ function openEvent(id) {
     ? `🚗 ${esc(memberName(ride.driver_profile_id))} ${ride.driver_profile_id === me ? 'are' : 'is'} driving${ride.notes ? ` · ${esc(ride.notes)}` : ''}`
     : '🚗 No driver yet';
   showModal(`<span class="eyebrow">${esc([a?.name, team?.sport].filter(Boolean).join(' · ') || 'EVENT')}</span><h2>${esc(e.title)}</h2>${team ? `<p>${esc(team.name)}</p>` : ''}
-    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.location)}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}</div>
+    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}</div>
     ${e.description ? `<p style="white-space:pre-wrap">${esc(e.description)}</p>` : ''}
+    ${e.location ? `<div class="row-actions">${directionsButton(e.location, 'primary full')}</div>` : ''}
     <div class="row-actions">${ride?.driver_profile_id === me ? `<button class="outline" data-action="release-ride" data-id="${e.id}">I can’t drive</button>` : `<button class="primary" data-action="claim-ride" data-id="${e.id}">${ride?.driver_profile_id ? 'I’ll drive instead' : 'I’ll drive'}</button>`}
     <button class="outline" data-action="edit-event" data-id="${e.id}">Edit</button><button class="danger-btn" data-action="delete-event" data-id="${e.id}">Delete</button></div>`);
 }
@@ -551,7 +557,7 @@ function ridesHTML() {
       const driver = ride?.driver_profile_id;
       return `<div class="list-row"><span class="avatar" style="background:${esc(colorOf(e))};color:#fff">${initials(a?.name || e.title)}</span><span class="grow"><strong>${esc(e.title)}</strong><span class="sub">${esc(fmtDate(e.start))} · ${esc(fmtTime(e.start))}${e.location ? ' · ' + esc(e.location) : ''}</span></span>
         ${driver ? `<span class="pill ok">${esc(memberName(driver).toUpperCase())}${driver === me ? '' : ' DRIVING'}</span>` : '<span class="pill warn">NEEDS DRIVER</span>'}
-        ${driver === me ? `<button class="outline" data-action="release-ride" data-id="${e.id}">Release</button>` : `<button class="outline" data-action="claim-ride" data-id="${e.id}">I’ll drive</button>`}</div>`;
+        ${driver === me ? `<button class="outline" data-action="release-ride" data-id="${e.id}">Release</button>` : `<button class="outline" data-action="claim-ride" data-id="${e.id}">I’ll drive</button>`}${directionsButton(e.location)}</div>`;
     }).join('')}</div>`;
 }
 
