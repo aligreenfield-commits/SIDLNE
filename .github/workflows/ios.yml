@@ -55,7 +55,7 @@ jobs:
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
       # Key ID of the App Store Connect API key (not secret). Used when the setting above
       # is empty or isn't a Key ID. Update it if you replace the key.
-      DEFAULT_ASC_KEY_ID: 48A56P8KG8
+      DEFAULT_ASC_KEY_ID: LRKVQL52JP
       ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
       ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
     steps:
