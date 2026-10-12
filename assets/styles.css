@@ -259,6 +259,21 @@ footer{padding-bottom:10px}
 .athlete-chip{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700}
 .team-card .meta{font-size:11px;color:var(--muted);margin:6px 0 0}
 .sync-ok{color:var(--green);font-weight:700}
+.sync-err{color:#b4472f;font-weight:700}
+/* "Are you going?" */
+.rsvp{margin:18px 0}
+.rsvp h3{font-size:14px;margin:0 0 10px}
+.rsvp-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:8px 0}
+.rsvp-name{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:700}
+.rsvp .segmented button{padding:8px 12px}
+.rsvp .segmented button.rsvp-going{background:var(--green);color:#fff}
+.rsvp .segmented button.rsvp-maybe{background:#c9a23a;color:#fff}
+.rsvp .segmented button.rsvp-not_going{background:#b4472f;color:#fff}
+.event p.rsvp-line{font-weight:700}
+.rsvp-line .rsvp-going{color:var(--green)}
+.rsvp-line .rsvp-maybe{color:#a07f1d}
+.rsvp-line .rsvp-not_going{color:#b4472f}
+.event p.rsvp-line.ask{color:var(--ink);font-weight:600}
 .list-card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px 22px}
 .list-row{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}
 .list-row:last-child{border-bottom:0}

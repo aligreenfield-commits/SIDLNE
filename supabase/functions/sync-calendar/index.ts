@@ -7,7 +7,7 @@
 // POST { "team_id": "<uuid>" }  ->  { "imported": n, "removed": n }
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { parseIcs } from "./ics.ts";
+import { type IcsEvent, parseIcs } from "./ics.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -53,33 +53,51 @@ Deno.serve(async (req) => {
   if (!team) return json({ error: "Team not found" }, 404);
   if (!team.calendar_url) return json({ error: "This team has no calendar link" }, 400);
 
+  // Save the reason on the team so the app can show why a sync failed
+  const syncedTeamId: string = team.id;
+  const fail = async (error: string, status: number) => {
+    await supabase.from("teams").update({ last_sync_error: error.slice(0, 300) }).eq("id", syncedTeamId);
+    return json({ error }, status);
+  };
+
   let url: URL;
   try {
     url = new URL(team.calendar_url.trim().replace(/^webcals?:\/\//i, "https://"));
   } catch {
-    return json({ error: "The calendar link is not a valid URL" }, 400);
+    return fail("The calendar link is not a valid URL", 400);
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return json({ error: "Calendar links must start with https:// or webcal://" }, 400);
+    return fail("Calendar links must start with https:// or webcal://", 400);
   }
 
   let text: string;
   try {
-    const res = await fetch(url, { headers: { Accept: "text/calendar, text/plain, */*" }, redirect: "follow" });
-    if (!res.ok) return json({ error: `The calendar server answered ${res.status}` }, 502);
+    const res = await fetch(url, {
+      headers: { Accept: "text/calendar, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; SIDLNE calendar sync; +https://sidlne.app)" },
+      redirect: "follow",
+    });
+    if (!res.ok) return fail(`The calendar server answered ${res.status}`, 502);
     text = await res.text();
   } catch (err) {
-    return json({ error: `Could not download the calendar: ${(err as Error).message}` }, 502);
+    return fail(`Could not download the calendar: ${(err as Error).message}`, 502);
   }
-  if (text.length > MAX_FEED_BYTES) return json({ error: "That calendar is too large to import" }, 413);
-  if (!text.includes("BEGIN:VCALENDAR")) return json({ error: "That link did not return an iCal calendar" }, 422);
+  if (text.length > MAX_FEED_BYTES) return fail("That calendar is too large to import", 413);
+  if (!text.includes("BEGIN:VCALENDAR")) return fail("That link did not return an iCal calendar", 422);
 
   const now = Date.now();
   const from = now - PAST_DAYS * 864e5;
   const to = now + FUTURE_DAYS * 864e5;
-  const parsed = parseIcs(text).filter((e) => e.start.getTime() >= from && e.start.getTime() <= to);
+  let parsed: IcsEvent[];
+  try {
+    parsed = parseIcs(text).filter((e) => e.start.getTime() >= from && e.start.getTime() <= to);
+  } catch (err) {
+    return fail(`Could not read that calendar: ${(err as Error).message}`, 422);
+  }
 
-  const rows = parsed.map((e) => ({
+  // A feed can list the same event twice, which would fail the whole import; keep the first
+  const byUid = new Map<string, IcsEvent>();
+  for (const e of parsed) if (!byUid.has(e.uid)) byUid.set(e.uid, e);
+  const rows = [...byUid.values()].map((e) => ({
     household_id: team.household_id,
     team_id: team.id,
     athlete_id: team.athlete_id,
@@ -97,7 +115,7 @@ Deno.serve(async (req) => {
     const { error } = await supabase
       .from("events")
       .upsert(rows.slice(i, i + 500), { onConflict: "team_id,external_uid" });
-    if (error) return json({ error: error.message }, 400);
+    if (error) return fail(error.message, 400);
   }
 
   // Remove future imported events that the feed no longer contains (cancellations)
@@ -112,6 +130,7 @@ Deno.serve(async (req) => {
   if (stale.length) await supabase.from("events").delete().in("id", stale);
 
   await supabase.from("teams").update({ last_synced_at: new Date().toISOString() }).eq("id", team.id);
+  await supabase.from("teams").update({ last_sync_error: null }).eq("id", team.id);
 
   return json({ imported: rows.length, removed: stale.length });
 });

@@ -32,6 +32,7 @@ const state = {
   events: [],
   rides: [],
   messages: [],
+  attendance: [],
   tab: 'Overview',
   view: 'week',
   filter: 'all',
@@ -40,6 +41,8 @@ const state = {
   authMode: 'signin',
   recovering: false,
   channel: null,
+  syncing: false,
+  syncAttempts: {},
 };
 
 const icons = {
@@ -161,7 +164,18 @@ async function loadHouseholdData() {
   state.events = must(events);
   state.rides = must(rides);
   state.messages = must(messages).reverse();
+  state.attendance = await fetchAttendance(hid, since);
   scheduleReminders();
+}
+
+// "Are you going?" answers for this family's recent and upcoming events.
+// Tolerant of a database that doesn't have the table yet, so the app still loads.
+async function fetchAttendance(hid, since) {
+  const { data, error } = await supabase.from('event_attendance')
+    .select('event_id, athlete_id, status, updated_by, events!inner(household_id, start)')
+    .eq('events.household_id', hid).gte('events.start', since);
+  if (error) { console.warn('Attendance unavailable:', error.message); return []; }
+  return data;
 }
 
 async function reload(...tables) {
@@ -175,6 +189,7 @@ async function reload(...tables) {
     athletes: async () => { state.athletes = must(await supabase.from('athletes').select('*').eq('household_id', hid).order('created_at')); },
     members: async () => { state.members = must(await supabase.from('household_members').select('id, role, profile_id, profiles(id, display_name, email)').eq('household_id', hid)); },
     messages: async () => { state.messages = must(await supabase.from('messages').select('*').eq('household_id', hid).order('inserted_at', { ascending: false }).limit(200)).reverse(); },
+    attendance: async () => { state.attendance = await fetchAttendance(hid, since); },
   };
   await Promise.all(tables.map((t) => jobs[t]()));
   if (tables.includes('events')) scheduleReminders();
@@ -201,6 +216,7 @@ function subscribe() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `household_id=eq.${hid}` }, () => queue('events'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `household_id=eq.${hid}` }, () => queue('messages'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, () => queue('rides'))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'event_attendance' }, () => queue('attendance'))
     .subscribe();
 }
 
@@ -317,6 +333,7 @@ function renderApp() {
   <nav class="mobile-nav" id="mobileNav"></nav>
   ${installTip()}`;
   renderMain();
+  autoSync();
 }
 
 function installTip() {
@@ -460,11 +477,23 @@ function monthHTML() {
   }).join('')}</div>`;
 }
 
+// "Are you going?": one answer per athlete per event
+const RSVP = { going: { label: 'Going', icon: '✓' }, maybe: { label: 'Maybe', icon: '?' }, not_going: { label: 'Not going', icon: '✕' } };
+function rsvpAthletes(e) { const a = athleteOf(e); return a ? [a] : state.athletes; }
+function rsvpOf(eventId, athleteId) { return state.attendance.find((r) => r.event_id === eventId && r.athlete_id === athleteId)?.status; }
+
+function rsvpLine(e) {
+  const who = rsvpAthletes(e);
+  const answers = who.map((a) => [a, rsvpOf(e.id, a.id)]).filter(([, s]) => RSVP[s]);
+  if (answers.length) return `<p class="rsvp-line">${answers.map(([a, s]) => `<span class="rsvp-${s}">${RSVP[s].icon} ${esc(a.name)} ${esc(RSVP[s].label.toLowerCase())}</span>`).join(' · ')}</p>`;
+  return who.length && new Date(e.start) > Date.now() ? '<p class="rsvp-line ask">Are you going?</p>' : '';
+}
+
 function eventHTML(e) {
   const t = fmtTime(e.start).split(' ');
   const a = athleteOf(e), team = byId(state.teams, e.team_id);
   const ride = rideFor(e.id);
-  return `<button class="event" data-action="open-event" data-id="${e.id}"><span class="time"><strong>${esc(t[0])}</strong><small>${esc(t[1] || '')}</small></span><i class="bar" style="--c:${esc(colorOf(e))}"></i><span>${a || team?.sport ? `<small class="tag" style="--c:${esc(colorOf(e))}">${esc([a?.name, team?.sport].filter(Boolean).join(' · '))}</small>` : ''}<h3>${esc(e.title)}</h3>${team ? `<p>${esc(team.name)}</p>` : ''}${e.location ? `<p>⌖ ${esc(e.location)}</p>` : ''}${ride?.driver_profile_id ? `<p>🚗 ${esc(memberName(ride.driver_profile_id))} driving</p>` : ''}</span><small class="source">${e.source === 'ical' ? 'Team calendar' : ''}</small></button>`;
+  return `<button class="event" data-action="open-event" data-id="${e.id}"><span class="time"><strong>${esc(t[0])}</strong><small>${esc(t[1] || '')}</small></span><i class="bar" style="--c:${esc(colorOf(e))}"></i><span>${a || team?.sport ? `<small class="tag" style="--c:${esc(colorOf(e))}">${esc([a?.name, team?.sport].filter(Boolean).join(' · '))}</small>` : ''}<h3>${esc(e.title)}</h3>${team ? `<p>${esc(team.name)}</p>` : ''}${e.location ? `<p>⌖ ${esc(e.location)}</p>` : ''}${ride?.driver_profile_id ? `<p>🚗 ${esc(memberName(ride.driver_profile_id))} driving</p>` : ''}${rsvpLine(e)}</span><small class="source">${e.source === 'ical' ? 'Team calendar' : ''}</small></button>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -478,7 +507,7 @@ function teamsHTML() {
     ? `<div class="teams">${state.teams.map((t) => {
       const a = byId(state.athletes, t.athlete_id);
       return `<div class="team-card"><div class="team-icon">${SPORT_ICONS[t.sport] || '🏅'}</div><h2>${esc(t.name)}</h2><p>${esc([a?.name, t.sport].filter(Boolean).join(' · ') || 'No athlete assigned')}</p>
-        <p class="meta">${t.calendar_url ? (t.last_synced_at ? `<span class="sync-ok">● Calendar linked</span> · synced ${esc(fmtDate(t.last_synced_at))} ${esc(fmtTime(t.last_synced_at))}` : '<span class="sync-ok">● Calendar linked</span> · not synced yet') : 'No calendar link · add events by hand'}</p>
+        <p class="meta">${t.calendar_url ? (t.last_sync_error ? `<span class="sync-err">● Sync problem</span> · ${esc(t.last_sync_error)}` : t.last_synced_at ? `<span class="sync-ok">● Calendar linked</span> · synced ${esc(fmtDate(t.last_synced_at))} ${esc(fmtTime(t.last_synced_at))}` : '<span class="sync-ok">● Calendar linked</span> · not synced yet') : 'No calendar link · add events by hand'}</p>
         <div class="row-actions">${t.calendar_url ? `<button class="outline" data-action="sync-team" data-id="${t.id}">Sync now</button>` : ''}<button class="outline" data-action="edit-team" data-id="${t.id}">Edit</button>${a ? `<button class="link-btn" data-action="filter-athlete" data-id="${a.id}">View lineup</button>` : ''}</div></div>`;
     }).join('')}</div>`
     : '<div class="panel empty"><h3>No teams yet.</h3><p>Add a team to color-code events and import its schedule.</p></div>';
@@ -501,21 +530,54 @@ function teamForm(t) {
     <form class="form" data-form="team" data-id="${t?.id || ''}"><label>Team name<input name="name" required maxlength="80" value="${esc(t?.name)}" placeholder="Northside U12 Lacrosse"></label>
     <div class="form-grid"><label>Athlete<select name="athlete_id"><option value="">—</option>${state.athletes.map((a) => `<option value="${a.id}" ${t?.athlete_id === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
     <label>Sport<select name="sport"><option value="">—</option>${SPORTS.map((s) => `<option ${t?.sport === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
-    <label>Calendar link (optional)<input name="calendar_url" type="text" inputmode="url" value="${esc(t?.calendar_url)}" placeholder="webcal://… or https://….ics"><small class="hint">We’ll import the schedule and keep it up to date whenever you sync.</small></label>
+    <label>Calendar link (optional)<input name="calendar_url" type="text" inputmode="url" value="${esc(t?.calendar_url)}" placeholder="webcal://… or https://….ics"><small class="hint">We’ll import the schedule and keep it up to date automatically.</small></label>
     <button class="primary full" type="submit">${t ? 'Save team' : 'Add team'}</button></form>
     ${t ? `<div class="row-actions"><button class="danger-btn" data-action="delete-team" data-id="${t.id}">Delete team and its imported events</button></div>` : ''}`);
 }
 
-async function syncTeam(id, quiet) {
+async function invokeSync(id) {
+  state.syncAttempts[id] = Date.now();
   const { data, error } = await supabase.functions.invoke('sync-calendar', { body: { team_id: id } });
   if (error) {
     let msg = error.message;
     try { msg = (await error.context.json()).error || msg; } catch {}
     throw new Error(msg);
   }
-  await reload('events', 'teams');
+  return data;
+}
+
+async function syncTeam(id, quiet) {
+  let data;
+  try { data = await invokeSync(id); } finally { await reload('teams').catch(() => {}); }
+  await reload('events');
   if (!quiet) toast(`Imported ${data.imported} ${data.imported === 1 ? 'event' : 'events'}`);
   renderMain();
+}
+
+// Keep team calendars current: whenever the app opens or comes back to the
+// foreground, re-import any calendar that hasn't synced in the last hour.
+const AUTO_SYNC_MS = 60 * 60 * 1000;
+const RETRY_MS = 15 * 60 * 1000;
+
+async function autoSync() {
+  if (state.syncing || !state.household || !navigator.onLine) return;
+  const now = Date.now();
+  const due = state.teams.filter((t) => t.calendar_url
+    && (!t.last_synced_at || now - new Date(t.last_synced_at) > AUTO_SYNC_MS)
+    && !(now - (state.syncAttempts[t.id] || 0) < RETRY_MS));
+  if (!due.length) return;
+  state.syncing = true;
+  try {
+    for (const t of due) {
+      try { await invokeSync(t.id); } catch (err) { console.warn(`Calendar sync failed for ${t.name}:`, err.message); }
+    }
+    await reload('events', 'teams');
+    if (state.tab !== 'Chat') renderMain();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    state.syncing = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -544,10 +606,34 @@ function openEvent(id) {
     : '🚗 No driver yet';
   showModal(`<span class="eyebrow">${esc([a?.name, team?.sport].filter(Boolean).join(' · ') || 'EVENT')}</span><h2>${esc(e.title)}</h2>${team ? `<p>${esc(team.name)}</p>` : ''}
     <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}</div>
+    ${rsvpHTML(e)}
     ${e.description ? `<p style="white-space:pre-wrap">${esc(e.description)}</p>` : ''}
     ${e.location ? `<div class="row-actions">${directionsButton(e.location, 'primary full')}</div>` : ''}
     <div class="row-actions">${ride?.driver_profile_id === me ? `<button class="outline" data-action="release-ride" data-id="${e.id}">I can’t drive</button>` : `<button class="primary" data-action="claim-ride" data-id="${e.id}">${ride?.driver_profile_id ? 'I’ll drive instead' : 'I’ll drive'}</button>`}
     <button class="outline" data-action="edit-event" data-id="${e.id}">Edit</button><button class="danger-btn" data-action="delete-event" data-id="${e.id}">Delete</button></div>`);
+}
+
+function rsvpHTML(e) {
+  const who = rsvpAthletes(e);
+  if (!who.length) return '';
+  return `<div class="rsvp"><h3>Are you going?</h3>${who.map((a) => {
+    const cur = rsvpOf(e.id, a.id);
+    return `<div class="rsvp-row"><span class="rsvp-name"><i class="dot" style="background:${esc(a.color)}"></i>${esc(a.name)}</span><div class="segmented">${Object.entries(RSVP).map(([k, v]) => `<button class="${cur === k ? `active rsvp-${k}` : ''}" data-action="rsvp" data-event="${e.id}" data-athlete="${a.id}" data-status="${k}" aria-pressed="${cur === k}">${v.label}</button>`).join('')}</div></div>`;
+  }).join('')}</div>`;
+}
+
+// Tapping the current answer again clears it
+async function setRsvp(eventId, athleteId, status) {
+  if (rsvpOf(eventId, athleteId) === status) {
+    must(await supabase.from('event_attendance').delete().eq('event_id', eventId).eq('athlete_id', athleteId));
+  } else {
+    must(await supabase.from('event_attendance').upsert(
+      { event_id: eventId, athlete_id: athleteId, status, updated_by: state.session.user.id, updated_at: new Date().toISOString() },
+      { onConflict: 'event_id,athlete_id' },
+    ));
+  }
+  await reload('attendance');
+  renderMain();
 }
 
 // ---------------------------------------------------------------------------
@@ -742,6 +828,7 @@ const actions = {
     if (!confirm('Delete this event for everyone in your family?')) return;
     await busy(null, async () => { must(await supabase.from('events').delete().eq('id', el.dataset.id)); await reload('events', 'rides'); closeModal(); renderMain(); toast('Event deleted'); });
   },
+  'rsvp': (el) => busy(null, async () => { await setRsvp(el.dataset.event, el.dataset.athlete, el.dataset.status); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.event); }),
   'claim-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, true); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),
   'release-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, false); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),
   'add-athlete': () => athleteForm(),
@@ -932,6 +1019,8 @@ document.addEventListener('submit', (ev) => {
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeModal(); });
 
 window.addEventListener('online', () => { document.getElementById('live')?.classList.remove('hidden'); if (state.household) reload('events', 'rides', 'messages').then(renderMain).catch(() => {}); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') autoSync(); });
+setInterval(autoSync, RETRY_MS);
 window.addEventListener('offline', () => { toast('You’re offline. Changes will fail until you reconnect.'); });
 
 if (!NATIVE && 'serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(() => {}));
