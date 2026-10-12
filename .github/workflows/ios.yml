@@ -53,6 +53,11 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       # Key ID and Issuer ID aren't secret, so either a secret or a variable works
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
+      # Key ID of the App Store Connect API key (not secret). Takes priority over the
+      # setting above. Update it if you replace the key.
+      DEFAULT_ASC_KEY_ID: LRKVQL52JP
+      # Apple Developer Team ID (developer.apple.com > Account > Membership; not secret)
+      DEFAULT_TEAM_ID: V3LQXRMUDZ
       ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
       ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
     steps:
@@ -87,10 +92,14 @@ jobs:
           set -euo pipefail
           # Name every missing setting up front instead of failing deep inside xcodebuild
           missing=()
-          [ -n "$ASC_KEY_ID" ] || missing+=(APP_STORE_CONNECT_KEY_ID)
+          ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
+          # The Key ID written in this file wins; the setting is only a fallback
+          if [ -n "$DEFAULT_ASC_KEY_ID" ]; then ASC_KEY_ID="$DEFAULT_ASC_KEY_ID"; fi
           [ -n "$ASC_ISSUER_ID" ] || missing+=(APP_STORE_CONNECT_ISSUER_ID)
           # Accept the .p8 text with or without its BEGIN/END lines (easy to miss when copying on a phone)
           KEY_BODY="$(printf '%s' "$ASC_KEY" | tr -d '[:space:]')"
+          case "$ASC_KEY" in *"BEGIN PRIVATE KEY"*) has_begin=yes ;; *) has_begin=no ;; esac
+          echo "Key text from APP_STORE_CONNECT_KEY: ${#KEY_BODY} characters, BEGIN line: $has_begin"
           case "$ASC_KEY" in
             *"BEGIN PRIVATE KEY"*) ;;
             *)
@@ -104,11 +113,18 @@ jobs:
             for m in "${missing[@]}"; do echo "::error::Missing or empty: $m (Settings > Secrets and variables > Actions)"; done
             exit 1
           fi
-          ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
           ASC_ISSUER_ID="$(printf '%s' "$ASC_ISSUER_ID" | tr -d '[:space:]')"
           APPLE_TEAM_ID="$(printf '%s' "$APPLE_TEAM_ID" | tr -d '[:space:]')"
+          if [ "$APPLE_TEAM_ID" != "$DEFAULT_TEAM_ID" ]; then
+            echo "::warning::APPLE_TEAM_ID setting doesn't match the Team ID in ios.yml; using $DEFAULT_TEAM_ID"
+            APPLE_TEAM_ID="$DEFAULT_TEAM_ID"
+          fi
           KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
           printf '%s' "$ASC_KEY" > "$KEY_PATH"
+          # Check the key with Apple first, so a wrong key gets a clear message
+          ruby .github/scripts/asc-check.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID"
+          ASC_ISSUER_ID="$(< "$KEY_PATH.issuer")"
+
           AUTH=(-allowProvisioningUpdates
                 -authenticationKeyPath "$KEY_PATH"
                 -authenticationKeyID "$ASC_KEY_ID"

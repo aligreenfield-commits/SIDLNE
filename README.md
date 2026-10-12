@@ -7,8 +7,9 @@
 - **Accounts:** email and password sign-up, email confirmation and password reset (Supabase Auth)
 - **Families:** create a family, invite people with a code or link, roles (owner, admin, member), switch between families
 - **Athletes and teams:** color-coded per athlete
-- **Team calendar sync:** paste an iCal or `webcal://` link from TeamSnap, SportsEngine, LeagueApps, GameChanger, Sports Connect, Crossbar or Google Calendar. Recurring events, time zones and cancellations are handled.
+- **Team calendar sync:** paste an iCal or `webcal://` link from TeamSnap, SportsEngine, LeagueApps, GameChanger, Sports Connect, Crossbar or Google Calendar. Recurring events, time zones and cancellations are handled, and calendars re-sync automatically whenever the app is opened.
 - **Calendar:** week and month views, filter by athlete, add, edit and delete events
+- **Are you going?:** mark each athlete Going, Maybe or Not going for every event
 - **Rides:** claim or release a drive, see which events still need a driver
 - **Chat:** realtime family chat
 - **Overlap alerts:** warns when two athletes need to be in different places at once
