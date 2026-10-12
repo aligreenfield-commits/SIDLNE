@@ -16,6 +16,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Check https://sidlne.app
         run: |
           set -u
@@ -30,6 +32,14 @@ jobs:
           else
             echo "::error::config.js on sidlne.app is missing the Supabase settings"; fail=1
           fi
+          # The live app should be the latest code on main (Cloudflare redeploys on every push)
+          for f in assets/app.js assets/styles.css; do
+            if [ "$(curl -sS -L --max-time 20 "https://sidlne.app/$f" | sha256sum | cut -c1-64)" = "$(sha256sum "$f" | cut -c1-64)" ]; then
+              echo "$f on sidlne.app matches main"
+            else
+              echo "::warning::$f on sidlne.app differs from main (deploy pending or stuck?)"
+            fi
+          done
           echo "--- DNS ---"; getent hosts sidlne.app || echo "sidlne.app does not resolve"
           echo "--- Cloudflare Pages project address ---"
           curl -sS -o /dev/null -w 'https://sidlne.pages.dev -> HTTP %{http_code}\n' --max-time 20 https://sidlne.pages.dev/ || echo "sidlne.pages.dev not reachable"
