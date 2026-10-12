@@ -55,7 +55,7 @@ jobs:
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
       # Key ID of the App Store Connect API key (not secret). Takes priority over the
       # setting above. Update it if you replace the key.
-      DEFAULT_ASC_KEY_ID: LRKVQL52J8
+      DEFAULT_ASC_KEY_ID: T66KX7L8H8
       # Apple Developer Team ID (developer.apple.com > Account > Membership; not secret)
       DEFAULT_TEAM_ID: V3LQXRMUDZ
       ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
