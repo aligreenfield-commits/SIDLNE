@@ -383,6 +383,7 @@ function installTip() {
 
 function renderMain() {
   if (!document.getElementById('main')) return;
+  saveSiriSnapshot();
   const tab = state.tab;
   document.getElementById('crumb').textContent = tab;
   document.getElementById('pageTitle').textContent = TITLES[tab][0];
@@ -1081,7 +1082,7 @@ const GAME_DAY_SONGS = [
 async function fetchPlaylists(hid) {
   const { data, error } = await supabase.from('game_day_playlists').select('*').eq('household_id', hid).order('created_at');
   if (error) { console.warn('Playlists unavailable:', error.message); return []; }
-  return data;
+  return data || [];
 }
 
 function musicService() {
@@ -1304,6 +1305,53 @@ async function forgetPushDevice() {
 }
 
 // ---------------------------------------------------------------------------
+// Siri (iPhone app only): a summary of the next two weeks, saved on the phone
+// for the Siri shortcuts in ios/App/App/SiriShortcuts.swift to read.
+// ---------------------------------------------------------------------------
+const SIRI_KEY = 'sidlne-siri';
+let siriTimer = null, siriLast = '';
+
+function saveSiriSnapshot() {
+  const Prefs = Plugins.Preferences;
+  if (!NATIVE || !Prefs || !state.household) return;
+  clearTimeout(siriTimer);
+  siriTimer = setTimeout(async () => {
+    try {
+      const svc = musicService();
+      const fallbackMix = svc === 'siriusxm' ? SXM_CHANNELS[0].url : MUSIC[svc].search('pump up clean');
+      // Every athlete's events, whatever filter is on screen
+      const now = Date.now();
+      const soon = state.events
+        .filter((e) => new Date(e.end || e.start).getTime() > now && new Date(e.start).getTime() < now + 14 * DAY)
+        .sort((x, y) => new Date(x.start) - new Date(y.start));
+      const events = soon.slice(0, 25).map((e) => {
+        const ride = rideFor(e.id);
+        const c = state.carpools.find((x) => x.team_id === e.team_id && ownsCarpool(x));
+        const carpoolTo = c && carpoolDriver(c.id, e.id, 'to');
+        return {
+          title: e.title,
+          start: new Date(e.start).toISOString(),
+          athlete: athleteOf(e)?.name || null,
+          location: e.location || null,
+          driver: ride?.driver_profile_id ? memberName(ride.driver_profile_id) : carpoolTo?.name || null,
+          directionsUrl: e.location ? wazeUrl(e.location) : null,
+          mixUrl: playlistsFor(e.athlete_id)[0]?.url || null,
+        };
+      });
+      const value = JSON.stringify({ events, mixUrl: state.playlists[0]?.url || fallbackMix });
+      if (value === siriLast) return;
+      siriLast = value;
+      await Prefs.set({ key: SIRI_KEY, value });
+    } catch (err) { console.error('Could not update Siri', err); }
+  }, 500);
+}
+
+async function clearSiriSnapshot() {
+  siriLast = '';
+  try { await Plugins.Preferences?.remove({ key: SIRI_KEY }); } catch {}
+}
+
+// ---------------------------------------------------------------------------
 // Family settings
 // ---------------------------------------------------------------------------
 function inviteLink() {
@@ -1326,6 +1374,7 @@ function familyHTML() {
       ${others.length ? `<p style="margin-top:14px">Switch to:</p>${others.map((m) => `<button class="outline" style="margin:0 6px 6px 0" data-action="switch-household" data-id="${m.household_id}">${esc(m.households.name)}</button>`).join('')}` : ''}
       <div class="row-actions"><button class="link-btn" data-action="new-household">＋ Create or join another family</button></div>
       <div class="row-actions">${state.role === 'owner' ? '<button class="danger-btn" data-action="delete-household">Delete family</button>' : '<button class="danger-btn" data-action="leave-household">Leave family</button>'}</div></div>
+    ${NATIVE && Plugins.Preferences ? `<div class="rail-card siri-card"><h2>Hey Siri</h2><p>Ask Siri, hands-free in the car:</p><ul class="siri-list"><li>“What’s next on SIDLNE?”</li><li>“Who’s driving on SIDLNE?”</li><li>“What’s on this week in SIDLNE?”</li><li>“Play the Game Day mix on SIDLNE”</li><li>“Take me to the game with SIDLNE”</li></ul><p class="hint">They also appear in the Shortcuts app, so you can add them to CarPlay or your Home Screen.</p></div>` : ''}
     ${NATIVE && Plugins.PushNotifications ? `<div class="rail-card"><h2>Schedule-change alerts</h2><p>${state.pushStatus === 'granted' ? 'On. This phone gets a notification when a game or practice moves, changes fields, is cancelled or is added.' : 'Get a notification on this phone when a game or practice moves, changes fields, is cancelled or is added.'}</p>${state.pushStatus === 'granted' ? '<span class="pill ok">NOTIFICATIONS ON</span>' : '<button class="primary" data-action="enable-push">🔔 Turn on notifications</button>'}</div>` : ''}
     ${NATIVE && Plugins.LocalNotifications ? `<div class="rail-card"><h2>Game reminders</h2><p>Get a notification 1 hour before every practice and game on this phone.</p><button class="${remindersOn() ? 'outline' : 'primary'}" data-action="toggle-reminders">${remindersOn() ? 'Turn off reminders' : '🔔 Turn on reminders'}</button></div>` : ''}
     <div class="rail-card"><h2>Account</h2><p>Permanently delete your account and personal data. Families you own are deleted too.</p><button class="danger-btn" data-action="delete-account">Delete my account</button></div>
@@ -1343,7 +1392,7 @@ const actions = {
   'close-modal': closeModal,
   retry: () => enter(),
   'auth-mode': (el) => { state.authMode = el.dataset.mode; renderAuth(); },
-  'sign-out': async () => { if (state.channel) supabase.removeChannel(state.channel); await forgetPushDevice(); await supabase.auth.signOut(); state.session = null; renderAuth(); },
+  'sign-out': async () => { if (state.channel) supabase.removeChannel(state.channel); await forgetPushDevice(); await clearSiriSnapshot(); await supabase.auth.signOut(); state.session = null; renderAuth(); },
   'dismiss-install': () => { document.getElementById('installTip')?.remove(); try { localStorage.setItem('sidlne-install-dismissed', '1'); } catch {} },
   go: (el) => { closeModal(); go(el.dataset.tab); },
   'go-teams': () => go('Teams'),
@@ -1463,7 +1512,7 @@ const actions = {
   'change-password': () => showModal('<span class="eyebrow">ACCOUNT</span><h2>Change password</h2><form class="form" data-form="reset"><label>New password<input name="password" type="password" autocomplete="new-password" required minlength="8"></label><button class="primary full" type="submit">Save password</button></form>'),
   'delete-account': async () => {
     if (prompt('This permanently deletes your account. Families you own are deleted for everyone. Type DELETE to confirm.') !== 'DELETE') return;
-    await busy(null, async () => { must(await supabase.rpc('delete_my_account')); await supabase.auth.signOut(); state.session = null; renderAuth(); toast('Your account was deleted'); });
+    await busy(null, async () => { must(await supabase.rpc('delete_my_account')); await clearSiriSnapshot(); await supabase.auth.signOut(); state.session = null; renderAuth(); toast('Your account was deleted'); });
   },
 };
 

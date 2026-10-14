@@ -13,6 +13,7 @@
 - **Schedule-change alerts:** when a team calendar moves a game, changes the field, cancels or adds an event, the whole family sees it. Calendars are re-checked every 15 minutes and every parent with the iPhone app gets a push notification
 - **Carpools:** share a team’s schedule with other families by invite link, assign a drop-off and pick-up driver for every event, auto-assign drives fairly, and import or export a Google Sheet
 - **Game Day mix:** one tap from the next game to a pump-up playlist on Spotify, Apple Music or SiriusXM. Save your family’s own playlists, or use SIDLNE’s clean pump-up picks and kids’ SiriusXM channels
+- **Siri:** “What’s next on SIDLNE?”, “Who’s driving on SIDLNE?”, “What’s on this week in SIDLNE?”, “Play the Game Day mix on SIDLNE” and “Take me to the game with SIDLNE” (iPhone app; also in the Shortcuts app)
 - **Rides:** claim or release a drive, see which events still need a driver
 - **Chat:** realtime family chat
 - **Overlap alerts:** warns when two athletes need to be in different places at once
