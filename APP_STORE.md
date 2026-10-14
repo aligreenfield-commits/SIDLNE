@@ -46,6 +46,25 @@ https://appstoreconnect.apple.com → **Apps** → **＋** → **New App**
    - The build appears in **TestFlight** about 10–30 minutes later.
    - Every later merge to `main` that changes the app uploads a new build automatically.
 
+### Push notifications (schedule-change alerts)
+
+Apple needs a separate key for sending notifications. The App Store Connect key can't do it.
+
+1. Go to **developer.apple.com → Account → Certificates, IDs & Profiles → Keys → ＋**.
+2. Name it `SIDLNE Push` and tick **Apple Push Notifications service (APNs)**.
+3. Click **Configure**, choose **Sandbox & Production**, then **Save → Continue → Register**.
+4. **Download** the `AuthKey_XXXXXXXXXX.p8` file. It can be downloaded only once. Note the **Key ID**.
+5. In GitHub, go to **Settings → Environments → NEW KEYS** and add two secrets:
+
+| Secret | Value |
+|---|---|
+| `APNS_KEY` | The whole contents of that `.p8` file |
+| `APNS_KEY_ID` | That key's **Key ID** |
+
+6. Go to **Actions → Deploy calendar sync → Run workflow**. The run says "Push notifications are on" when it worked.
+
+The app build turns on the Push Notifications capability for `com.gmail.sidlne` automatically.
+
 ## 4. Test on your iPhone
 
 Install **TestFlight** from the App Store. In App Store Connect, go to **TestFlight → Internal Testing**, add yourself, and install SIDLNE from the TestFlight app.

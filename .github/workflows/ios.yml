@@ -125,6 +125,8 @@ jobs:
           # Check the key with Apple first, so a wrong key gets a clear message
           ruby .github/scripts/asc-check.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID"
           ASC_ISSUER_ID="$(< "$KEY_PATH.issuer")"
+          # Push notifications need the capability on the App ID before the profile is made
+          ruby .github/scripts/asc-push.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID" || true
 
           AUTH=(-allowProvisioningUpdates
                 -authenticationKeyPath "$KEY_PATH"
@@ -145,6 +147,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             "${AUTH[@]}" | tail -40
+
+          # Export signs with the entitlements already on the archived app, and an unsigned
+          # archive has none. Sign it ad hoc with the App Store entitlements (push) so they carry over.
+          APP="$RUNNER_TEMP/SIDLNE.xcarchive/Products/Applications/App.app"
+          sed 's#<string>development</string>#<string>production</string>#' ios/App/App/App.entitlements > "$RUNNER_TEMP/App.entitlements"
+          if [ -d "$APP/Frameworks" ]; then
+            find "$APP/Frameworks" -mindepth 1 -maxdepth 1 \( -name '*.framework' -o -name '*.dylib' \) -exec codesign --force --sign - --timestamp=none {} \;
+          fi
+          codesign --force --sign - --timestamp=none --entitlements "$RUNNER_TEMP/App.entitlements" "$APP"
+          ENTITLEMENTS="$(codesign -d --entitlements - "$APP" 2>&1 || true)"
+          if [[ "$ENTITLEMENTS" == *aps-environment* ]]; then
+            echo "Archive carries the push entitlement."
+          else
+            echo "::warning::The archived app has no push entitlement; notifications won't work in this build."
+          fi
 
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>

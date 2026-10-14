@@ -297,6 +297,7 @@ async function enter() {
     await selectHousehold(saved);
     renderApp();
     if (carpoolCode) carpoolJoinForm(carpoolCode);
+    setupPush();
   } catch (err) {
     console.error(err);
     root.innerHTML = `<div class="boot"><div style="text-align:center;max-width:420px;padding:20px"><h2>Something went wrong</h2><p>${esc(friendlyError(err))}</p><button class="primary" data-action="retry">Try again</button> <button class="outline" data-action="sign-out">Sign out</button></div></div>`;
@@ -1147,6 +1148,64 @@ if (NATIVE && Plugins.LocalNotifications) {
 }
 
 // ---------------------------------------------------------------------------
+// Push notifications (iPhone app only): schedule changes reach every parent's
+// phone, even when the app is closed. The server sends them; the app only
+// asks permission and registers the phone.
+// ---------------------------------------------------------------------------
+const PUSH_TOKEN_KEY = 'sidlne-push-token';
+let pushListening = false;
+state.pushStatus = null; // 'granted' | 'denied' | 'prompt'
+
+async function setupPush({ ask = true } = {}) {
+  const PN = Plugins.PushNotifications;
+  if (!NATIVE || !PN || !state.session) return;
+  try {
+    if (!pushListening) {
+      pushListening = true;
+      PN.addListener('registration', async ({ value }) => {
+        try {
+          must(await supabase.rpc('register_push_device', { device_token: value, device_platform: 'ios', device_time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || null }));
+          localStorage.setItem(PUSH_TOKEN_KEY, value);
+        } catch (err) { console.error('Could not register for notifications', err); }
+      });
+      PN.addListener('registrationError', (err) => console.error('Push registration failed', err));
+      // Tapping a notification opens the changed event (or the overview with the alerts)
+      PN.addListener('pushNotificationActionPerformed', ({ notification }) => openFromPush(notification?.data?.sidlne));
+    }
+    let perm = await PN.checkPermissions();
+    if (perm.receive === 'prompt' && ask) perm = await PN.requestPermissions();
+    state.pushStatus = perm.receive;
+    if (perm.receive === 'granted') await PN.register();
+  } catch (err) { console.error('Push setup failed', err); }
+}
+
+async function openFromPush(info) {
+  if (!info || !state.session) return;
+  try {
+    if (info.household_id && state.household?.id !== info.household_id && state.memberships.some((m) => m.household_id === info.household_id)) {
+      await selectHousehold(info.household_id);
+      renderApp();
+    }
+    if (info.event_id && state.events.some((e) => e.id === info.event_id)) { go('Calendar'); openEvent(info.event_id); }
+    else go('Overview');
+  } catch (err) { console.error(err); }
+}
+
+async function turnOnPush() {
+  await setupPush();
+  if (state.pushStatus === 'granted') toast('Notifications on: schedule changes will come to this phone');
+  else toast('Turn on notifications for SIDLNE in iPhone Settings > Notifications.');
+  renderMain();
+}
+
+// Stop sending this account's notifications to this phone
+async function forgetPushDevice() {
+  let token = null;
+  try { token = localStorage.getItem(PUSH_TOKEN_KEY); localStorage.removeItem(PUSH_TOKEN_KEY); } catch {}
+  if (token) { try { await supabase.rpc('unregister_push_device', { device_token: token }); } catch {} }
+}
+
+// ---------------------------------------------------------------------------
 // Family settings
 // ---------------------------------------------------------------------------
 function inviteLink() {
@@ -1169,6 +1228,7 @@ function familyHTML() {
       ${others.length ? `<p style="margin-top:14px">Switch to:</p>${others.map((m) => `<button class="outline" style="margin:0 6px 6px 0" data-action="switch-household" data-id="${m.household_id}">${esc(m.households.name)}</button>`).join('')}` : ''}
       <div class="row-actions"><button class="link-btn" data-action="new-household">＋ Create or join another family</button></div>
       <div class="row-actions">${state.role === 'owner' ? '<button class="danger-btn" data-action="delete-household">Delete family</button>' : '<button class="danger-btn" data-action="leave-household">Leave family</button>'}</div></div>
+    ${NATIVE && Plugins.PushNotifications ? `<div class="rail-card"><h2>Schedule-change alerts</h2><p>${state.pushStatus === 'granted' ? 'On. This phone gets a notification when a game or practice moves, changes fields, is cancelled or is added.' : 'Get a notification on this phone when a game or practice moves, changes fields, is cancelled or is added.'}</p>${state.pushStatus === 'granted' ? '<span class="pill ok">NOTIFICATIONS ON</span>' : '<button class="primary" data-action="enable-push">🔔 Turn on notifications</button>'}</div>` : ''}
     ${NATIVE && Plugins.LocalNotifications ? `<div class="rail-card"><h2>Game reminders</h2><p>Get a notification 1 hour before every practice and game on this phone.</p><button class="${remindersOn() ? 'outline' : 'primary'}" data-action="toggle-reminders">${remindersOn() ? 'Turn off reminders' : '🔔 Turn on reminders'}</button></div>` : ''}
     <div class="rail-card"><h2>Account</h2><p>Permanently delete your account and personal data. Families you own are deleted too.</p><button class="danger-btn" data-action="delete-account">Delete my account</button></div>
   </aside></div>`;
@@ -1185,7 +1245,7 @@ const actions = {
   'close-modal': closeModal,
   retry: () => enter(),
   'auth-mode': (el) => { state.authMode = el.dataset.mode; renderAuth(); },
-  'sign-out': async () => { if (state.channel) supabase.removeChannel(state.channel); await supabase.auth.signOut(); state.session = null; renderAuth(); },
+  'sign-out': async () => { if (state.channel) supabase.removeChannel(state.channel); await forgetPushDevice(); await supabase.auth.signOut(); state.session = null; renderAuth(); },
   'dismiss-install': () => { document.getElementById('installTip')?.remove(); try { localStorage.setItem('sidlne-install-dismissed', '1'); } catch {} },
   go: (el) => { closeModal(); go(el.dataset.tab); },
   'go-teams': () => go('Teams'),
@@ -1267,6 +1327,7 @@ const actions = {
   'sync-team': async (el) => { el.disabled = true; el.textContent = 'Syncing…'; await busy(null, () => syncTeam(el.dataset.id)); if (el.isConnected) { el.disabled = false; el.textContent = 'Sync now'; } },
   invite: () => go('Family'),
   'toggle-reminders': () => busy(null, () => setReminders(!remindersOn())),
+  'enable-push': () => busy(null, turnOnPush),
   'share-invite': async () => {
     const url = inviteLink();
     const text = `Join ${state.household.name} on SIDLNE. Invite code: ${state.household.invite_code}`;
