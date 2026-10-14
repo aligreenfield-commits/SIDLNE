@@ -134,11 +134,15 @@ jobs:
           # Build numbers must increase with every upload
           BUILD_NUMBER=$(( 100 + GITHUB_RUN_NUMBER ))
 
+          # Archive unsigned; the export below signs it for the App Store with a cloud-managed
+          # distribution certificate. (A development-signed archive would need a registered iPhone.)
+          # Cloud signing requires an App Store Connect API key with Admin access.
           xcodebuild archive \
             -project ios/App/App.xcodeproj -scheme App -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/SIDLNE.xcarchive" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             "${AUTH[@]}" | tail -40
 
@@ -156,11 +160,16 @@ jobs:
           </plist>
           EOF
 
-          xcodebuild -exportArchive \
+          if ! xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/SIDLNE.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export" \
-            "${AUTH[@]}"
+            "${AUTH[@]}" 2>&1 | tee "$RUNNER_TEMP/export.log"; then
+            if grep -q "Cloud signing permission error" "$RUNNER_TEMP/export.log"; then
+              echo "::error::API key $ASC_KEY_ID can't sign for the App Store: it needs Access = Admin (App Store Connect > Integrations > Team Keys)."
+            fi
+            exit 1
+          fi
 
           echo "::notice::Uploaded build $BUILD_NUMBER to App Store Connect. It appears in TestFlight after Apple finishes processing (about 10-30 minutes)."
 
