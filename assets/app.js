@@ -40,6 +40,7 @@ const state = {
   carpoolId: null,
   carpoolEvents: [],
   carpoolChannel: null,
+  playlists: [],
   tab: 'Overview',
   view: 'week',
   filter: 'all',
@@ -174,6 +175,7 @@ async function loadHouseholdData() {
   state.attendance = await fetchAttendance(hid, since);
   state.changes = await fetchChanges(hid);
   await loadCarpools();
+  state.playlists = await fetchPlaylists(hid);
   scheduleReminders();
 }
 
@@ -435,7 +437,7 @@ function overviewHTML() {
   const synced = state.teams.filter((t) => t.calendar_url).length;
 
   const hero = `<div class="grid-top"><div class="next"><span class="eyebrow">UP NEXT</span>${next
-    ? `<h2>${esc(next.title)}</h2><p>◷ ${esc(fmtDate(next.start))} · ${esc(fmtTime(next.start))}${athleteOf(next) ? ' · ' + esc(athleteOf(next).name) : ''}</p>${next.location ? `<p>⌖ ${esc(next.location)}</p>` : ''}<span class="pill ride-chip ${nextRide?.driver_profile_id ? 'ok' : 'warn'}">${nextRide?.driver_profile_id ? `🚗 ${esc(memberName(nextRide.driver_profile_id))} driving` : 'NEEDS A DRIVER'}</span>${next.location ? `<div class="next-actions">${directionsButton(next.location, 'primary')}</div>` : ''}`
+    ? `<h2>${esc(next.title)}</h2><p>◷ ${esc(fmtDate(next.start))} · ${esc(fmtTime(next.start))}${athleteOf(next) ? ' · ' + esc(athleteOf(next).name) : ''}</p>${next.location ? `<p>⌖ ${esc(next.location)}</p>` : ''}<span class="pill ride-chip ${nextRide?.driver_profile_id ? 'ok' : 'warn'}">${nextRide?.driver_profile_id ? `🚗 ${esc(memberName(nextRide.driver_profile_id))} driving` : 'NEEDS A DRIVER'}</span><div class="next-actions">${directionsButton(next.location, 'primary')}${gameDayButton(next.athlete_id, 'outline gameday-hero')}</div>`
     : '<h2>Your next play starts here.</h2><p>Add an event or connect a team calendar to fill your lineup.</p>'}<span class="ghost">S/</span></div>
     <div class="stat"><span class="eyebrow">NEXT 7 DAYS</span><strong>${week.length}</strong><p>${week.length === 1 ? 'event' : 'events'}<br>in the lineup</p><small>${state.athletes.length} ${state.athletes.length === 1 ? 'athlete' : 'athletes'} · ${teamCount} ${teamCount === 1 ? 'team' : 'teams'}</small></div></div>`;
 
@@ -690,7 +692,7 @@ function openEvent(id) {
     <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}${changeDetail(e.id)}${carpoolLine(e) ? `<div>🚙 ${esc(carpoolLine(e))}</div>` : ''}</div>
     ${rsvpHTML(e)}
     ${e.description ? `<p style="white-space:pre-wrap">${esc(e.description)}</p>` : ''}
-    ${e.location ? `<div class="row-actions">${directionsButton(e.location, 'primary full')}</div>` : ''}
+    <div class="row-actions">${directionsButton(e.location, 'primary')}${gameDayButton(e.athlete_id)}</div>
     <div class="row-actions">${ride?.driver_profile_id === me ? `<button class="outline" data-action="release-ride" data-id="${e.id}">I can’t drive</button>` : `<button class="primary" data-action="claim-ride" data-id="${e.id}">${ride?.driver_profile_id ? 'I’ll drive instead' : 'I’ll drive'}</button>`}
     <button class="outline" data-action="edit-event" data-id="${e.id}">Edit</button><button class="danger-btn" data-action="delete-event" data-id="${e.id}">Delete</button></div>`);
 }
@@ -728,13 +730,17 @@ async function setRsvp(eventId, athleteId, status) {
 // ---------------------------------------------------------------------------
 // Rides
 // ---------------------------------------------------------------------------
+function gameDayStrip() {
+  return `<div class="gameday-strip"><span>🎧 <strong>Driving to a game?</strong> Get the car pumped up.</span>${gameDayButton('', 'primary')}</div>`;
+}
+
 function ridesHTML() {
   if (state.carpoolId) return carpoolPageHTML();
   const list = upcoming(14);
   const me = state.session.user.id;
-  if (!list.length) return `${carpoolListHTML()}<div class="panel empty"><h3>No events in the next two weeks.</h3><p>When events are on the calendar, you can claim drives here.</p></div>`;
+  if (!list.length) return `${gameDayStrip()}${carpoolListHTML()}<div class="panel empty"><h3>No events in the next two weeks.</h3><p>When events are on the calendar, you can claim drives here.</p></div>`;
   const open = list.filter((e) => !rideFor(e.id)?.driver_profile_id).length;
-  return `${carpoolListHTML()}<div class="section-head"><h2>Family drives</h2></div><div class="list-card"><div class="panel-head" style="padding:16px 0 4px"><h2>Next 14 days</h2><span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} NEED${open === 1 ? 'S' : ''} A DRIVER` : 'ALL COVERED'}</span></div>
+  return `${gameDayStrip()}${carpoolListHTML()}<div class="section-head"><h2>Family drives</h2></div><div class="list-card"><div class="panel-head" style="padding:16px 0 4px"><h2>Next 14 days</h2><span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} NEED${open === 1 ? 'S' : ''} A DRIVER` : 'ALL COVERED'}</span></div>
     ${list.map((e) => {
       const ride = rideFor(e.id), a = athleteOf(e);
       const driver = ride?.driver_profile_id;
@@ -1046,6 +1052,98 @@ function carpoolCsv(cid) {
 function carpoolInviteLink(c) { return `${PUBLIC_URL}?carpool=${encodeURIComponent(c.invite_code)}`; }
 
 // ---------------------------------------------------------------------------
+// Game Day music: a pump-up mix for the drive. Families save their own playlist
+// links; SIDLNE suggests clean songs and kids' SiriusXM channels.
+// ---------------------------------------------------------------------------
+const MUSIC_KEY = 'sidlne-music';
+const MUSIC = {
+  spotify: { name: 'Spotify', search: (q) => `https://open.spotify.com/search/${encodeURIComponent(q)}` },
+  apple: { name: 'Apple Music', search: (q) => `https://music.apple.com/us/search?term=${encodeURIComponent(q)}` },
+  siriusxm: { name: 'SiriusXM' },
+};
+const SERVICE_NAMES = { ...Object.fromEntries(Object.entries(MUSIC).map(([k, v]) => [k, v.name])), youtube: 'YouTube Music', amazon: 'Amazon Music', link: 'Link' };
+const SXM_CHANNELS = [
+  { name: 'KIDZ BOP Radio', channel: 135, about: 'Today’s pop hits sung by kids', url: 'https://www.siriusxm.com/kidzbopradio' },
+  { name: 'Kids Place Live', channel: 134, about: 'Family-friendly music with live hosts', url: 'https://www.siriusxm.com/channels/kids-place-live' },
+];
+// Clean, kid-friendly pump-up songs
+const GAME_DAY_SONGS = [
+  ['We Will Rock You', 'Queen'], ['Eye of the Tiger', 'Survivor'], ['Hall of Fame', 'The Script, will.i.am'],
+  ['Believer', 'Imagine Dragons'], ['Thunder', 'Imagine Dragons'], ['Centuries', 'Fall Out Boy'],
+  ['Fight Song', 'Rachel Platten'], ['Roar', 'Katy Perry'], ['Unstoppable', 'Sia'],
+  ['Stronger (What Doesn’t Kill You)', 'Kelly Clarkson'], ['Seven Nation Army', 'The White Stripes'], ['Uptown Funk', 'Mark Ronson, Bruno Mars'],
+  ['Can’t Stop the Feeling!', 'Justin Timberlake'], ['Shake It Off', 'Taylor Swift'], ['Legend', 'The Score'],
+  ['Born For This', 'The Score'], ['The Final Countdown', 'Europe'], ['Thunderstruck', 'AC/DC'],
+  ['Titanium', 'David Guetta, Sia'], ['Good Feeling', 'Flo Rida'], ['On Top of the World', 'Imagine Dragons'],
+  ['We Are the Champions', 'Queen'],
+];
+
+async function fetchPlaylists(hid) {
+  const { data, error } = await supabase.from('game_day_playlists').select('*').eq('household_id', hid).order('created_at');
+  if (error) { console.warn('Playlists unavailable:', error.message); return []; }
+  return data;
+}
+
+function musicService() {
+  let v = null;
+  try { v = localStorage.getItem(MUSIC_KEY); } catch {}
+  return MUSIC[v] ? v : 'spotify';
+}
+
+function detectService(url) {
+  const host = (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+  if (/(^|\.)spotify\.(com|link)$|^spoti\.fi$/.test(host)) return 'spotify';
+  if (/^(music|itunes|embed\.music)\.apple\.com$/.test(host)) return 'apple';
+  if (/(^|\.)siriusxm\.(com|ca)$|^sxm\.app\.link$/.test(host)) return 'siriusxm';
+  if (/^music\.youtube\.com$|(^|\.)youtube\.com$|^youtu\.be$/.test(host)) return 'youtube';
+  if (/^music\.amazon\./.test(host)) return 'amazon';
+  return 'link';
+}
+
+// The family's saved mixes, this athlete's first
+function playlistsFor(athleteId) {
+  return [...state.playlists].sort((a, b) => (b.athlete_id === athleteId) - (a.athlete_id === athleteId));
+}
+
+function gameDayButton(athleteId = '', cls = 'outline') {
+  return `<button class="${cls} gameday-btn" data-action="game-day" data-athlete="${esc(athleteId || '')}">🎧 Game Day mix</button>`;
+}
+
+function playLink(url, label, cls = 'outline') {
+  return `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener">${label}</a>`;
+}
+
+function gameDayModal(athleteId = '') {
+  const svc = musicService();
+  const athlete = athleteId && byId(state.athletes, athleteId);
+  const sport = athlete && state.teams.find((t) => t.athlete_id === athlete.id && t.sport)?.sport;
+  const mixes = playlistsFor(athleteId);
+  const mine = mixes.map((p) => {
+    const who = p.athlete_id ? byId(state.athletes, p.athlete_id)?.name : null;
+    return `<div class="list-row mix-row"><span class="mix-icon ${esc(p.service)}">♪</span><span class="grow"><strong>${esc(p.title)}</strong><span class="sub">${esc(SERVICE_NAMES[p.service] || 'Link')}${who ? ` · ${esc(who)}’s mix` : ' · Family mix'}</span></span>${playLink(p.url, '▶ Play', 'primary')}<button class="link-btn" data-action="delete-playlist" data-id="${p.id}" data-athlete="${esc(athleteId)}" aria-label="Remove ${esc(p.title)}">✕</button></div>`;
+  }).join('');
+  const picks = svc === 'siriusxm'
+    ? `<h3>Kids’ channels on SiriusXM</h3>${SXM_CHANNELS.map((c) => `<div class="list-row mix-row"><span class="mix-icon siriusxm">${c.channel}</span><span class="grow"><strong>${esc(c.name)}</strong><span class="sub">Ch. ${c.channel} · ${esc(c.about)}</span></span>${playLink(c.url, '▶ Listen')}</div>`).join('')}
+       <p class="hint">Want a specific channel? Open it in the SiriusXM app, tap Share, and add the link above.</p>`
+    : `<div class="picks-head"><h3>SIDLNE pump-up picks</h3><span class="pill ok">CLEAN</span></div>
+       <div class="song-list">${GAME_DAY_SONGS.map(([t, a]) => `<a class="song" href="${esc(MUSIC[svc].search(`${t} ${a}`))}" target="_blank" rel="noopener"><strong>${esc(t)}</strong><span>${esc(a)}</span><i>▶</i></a>`).join('')}</div>
+       <div class="row-actions">${playLink(MUSIC[svc].search(`${sport ? sport + ' ' : ''}pump up clean`), `Find ${sport ? esc(sport.toLowerCase()) + ' ' : ''}pump-up playlists on ${MUSIC[svc].name}`)}<button class="link-btn" data-action="copy-songs">Copy song list</button></div>`;
+  showModal(`<span class="eyebrow">GAME DAY${athlete ? ' · ' + esc(athlete.name.toUpperCase()) : ''}</span><h2>🎧 Game Day mix</h2><p>Get the car fired up on the way to the game. Play to win!</p>
+    <div class="segmented music-tabs">${Object.entries(MUSIC).map(([k, v]) => `<button class="${k === svc ? 'active' : ''}" data-action="music-service" data-service="${k}" data-athlete="${esc(athleteId)}">${v.name}</button>`).join('')}</div>
+    <div class="section"><div class="section-head"><h3>Your family’s mixes</h3><button class="link-btn" data-action="add-playlist" data-athlete="${esc(athleteId)}">＋ Add a playlist</button></div>
+      ${mine ? `<div class="list-card mixes">${mine}</div>` : `<p class="subtitle">Save the playlist your kids love from Spotify, Apple Music or SiriusXM, and it’s one tap away before every game.</p>`}</div>
+    <div class="section">${picks}</div>`);
+}
+
+function playlistForm(athleteId = '') {
+  showModal(`<span class="eyebrow">GAME DAY</span><h2>Add a playlist</h2><p>In Spotify, Apple Music or SiriusXM, open the playlist or channel, tap <strong>Share → Copy link</strong>, and paste it here.</p>
+    <form class="form" data-form="playlist" data-athlete="${esc(athleteId)}"><label>Link<input name="url" type="url" required maxlength="500" placeholder="https://open.spotify.com/playlist/…"></label>
+    <label>Name<input name="title" required maxlength="80" placeholder="e.g. Hype Mix"></label>
+    <label>Whose mix<select name="athlete_id"><option value="">The whole family</option>${state.athletes.map((a) => `<option value="${a.id}" ${a.id === athleteId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+    <button class="primary full" type="submit">Save playlist</button></form>`);
+}
+
+// ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
 function chatHTML() {
@@ -1328,6 +1426,14 @@ const actions = {
   invite: () => go('Family'),
   'toggle-reminders': () => busy(null, () => setReminders(!remindersOn())),
   'enable-push': () => busy(null, turnOnPush),
+  'game-day': (el) => gameDayModal(el.dataset.athlete),
+  'music-service': (el) => { try { localStorage.setItem(MUSIC_KEY, el.dataset.service); } catch {} gameDayModal(el.dataset.athlete); },
+  'add-playlist': (el) => playlistForm(el.dataset.athlete),
+  'delete-playlist': async (el) => {
+    if (!confirm('Remove this playlist for everyone in your family?')) return;
+    await busy(null, async () => { must(await supabase.from('game_day_playlists').delete().eq('id', el.dataset.id)); state.playlists = await fetchPlaylists(state.household.id); gameDayModal(el.dataset.athlete); });
+  },
+  'copy-songs': () => copyText(GAME_DAY_SONGS.map(([t, a]) => `${t} – ${a}`).join('\n')),
   'share-invite': async () => {
     const url = inviteLink();
     const text = `Join ${state.household.name} on SIDLNE. Invite code: ${state.household.invite_code}`;
@@ -1362,6 +1468,15 @@ const actions = {
 };
 
 const forms = {
+  playlist: async (f, form) => {
+    const url = f.get('url').trim();
+    if (!/^https:\/\//i.test(url)) throw new Error('Paste the full link, starting with https://');
+    const athleteId = f.get('athlete_id') || null;
+    must(await supabase.from('game_day_playlists').insert({ household_id: state.household.id, athlete_id: athleteId, title: f.get('title').trim(), url, service: detectService(url), created_by: state.session.user.id }));
+    state.playlists = await fetchPlaylists(state.household.id);
+    gameDayModal(form.dataset.athlete || athleteId || '');
+    toast('Playlist saved');
+  },
   carpool: async (f) => {
     const team = byId(state.teams, f.get('team_id'));
     const c = must(await supabase.from('carpools').insert({ household_id: state.household.id, team_id: team.id, name: f.get('name').trim() || `${team.name} carpool`, created_by: state.session.user.id }).select().single());
