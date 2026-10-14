@@ -53,8 +53,8 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       # Key ID and Issuer ID aren't secret, so either a secret or a variable works
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
-      # Key ID of the App Store Connect API key (not secret). Takes priority over the
-      # setting above. Update it if you replace the key.
+      # Key ID of the App Store Connect API key (not secret). Used when the setting
+      # above is empty or isn't a Key ID. Update it if you replace the key.
       DEFAULT_ASC_KEY_ID: T66KX7L8H8
       # Apple Developer Team ID (developer.apple.com > Account > Membership; not secret)
       DEFAULT_TEAM_ID: V3LQXRMUDZ
@@ -93,8 +93,9 @@ jobs:
           # Name every missing setting up front instead of failing deep inside xcodebuild
           missing=()
           ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
-          # The Key ID written in this file wins; the setting is only a fallback
-          if [ -n "$DEFAULT_ASC_KEY_ID" ]; then ASC_KEY_ID="$DEFAULT_ASC_KEY_ID"; fi
+          # Use the APP_STORE_CONNECT_KEY_ID setting when it holds a Key ID, else the one in this file
+          [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || ASC_KEY_ID="$DEFAULT_ASC_KEY_ID"
+          echo "Using Key ID $ASC_KEY_ID"
           [ -n "$ASC_ISSUER_ID" ] || missing+=(APP_STORE_CONNECT_ISSUER_ID)
           # Accept the .p8 text with or without its BEGIN/END lines (easy to miss when copying on a phone)
           KEY_BODY="$(printf '%s' "$ASC_KEY" | tr -d '[:space:]')"
