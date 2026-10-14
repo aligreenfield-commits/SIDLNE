@@ -344,3 +344,28 @@ a.directions,a.directions:visited{color:var(--ink)}
 .leg.set select{border-color:var(--line)}
 .leg.mine select{border-color:var(--green);background:#eef6e3;color:var(--green)}
 @media(max-width:700px){.carpool-row{grid-template-columns:1fr 1fr}.carpool-row .what{grid-column:2}.carpool-head{align-items:flex-start}.carpool-grid{padding:4px 14px}}
+.next-actions{display:flex;gap:8px;flex-wrap:wrap}
+.next-actions .gameday-hero{padding:10px 14px;font-size:13px;background:transparent;color:inherit;border-color:currentColor}
+.gameday-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--ink);color:#fff;border-radius:12px;padding:14px 18px;margin-bottom:20px}
+.gameday-strip strong{color:var(--lime)}
+.music-tabs{margin:14px 0 6px}
+.music-tabs button{flex:1;padding:9px 10px;font-size:13px}
+.hint{display:block;font-size:12px;color:var(--muted);margin-top:8px}
+.mixes{padding:2px 14px}
+.mix-row{gap:10px}
+.mix-row .link-btn{color:var(--muted);padding:4px 6px}
+.mix-icon{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:13px;color:#fff;background:var(--ink);flex:none}
+.mix-icon.spotify{background:#1db954}
+.mix-icon.apple{background:linear-gradient(135deg,#fa233b,#fb5c74)}
+.mix-icon.siriusxm{background:#0000eb}
+.mix-icon.youtube{background:#f00}
+.mix-icon.amazon{background:#25d1da;color:#171a16}
+.picks-head{display:flex;align-items:center;gap:10px}
+.picks-head h3{margin:0}
+.song-list{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.song{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);text-decoration:none;min-width:0}
+.song strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song span{grid-row:2;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song i{grid-row:1/3;grid-column:2;font-style:normal;color:var(--green);font-size:13px}
+.song:hover{border-color:var(--green)}
+@media(max-width:700px){.song-list{grid-template-columns:1fr}.gameday-strip .primary{width:100%}}
