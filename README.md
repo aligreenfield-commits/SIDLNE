@@ -10,7 +10,7 @@
 - **Team calendar sync:** paste an iCal or `webcal://` link from TeamSnap, SportsEngine, LeagueApps, GameChanger, Sports Connect, Crossbar or Google Calendar. Recurring events, time zones and cancellations are handled, and calendars re-sync automatically whenever the app is opened.
 - **Calendar:** week and month views, filter by athlete, add, edit and delete events
 - **Are you going?:** mark each athlete Going, Maybe or Not going for every event
-- **Schedule-change alerts:** when a team calendar moves a game, changes the field, cancels or adds an event, the whole family sees it
+- **Schedule-change alerts:** when a team calendar moves a game, changes the field, cancels or adds an event, the whole family sees it. Calendars are re-checked every 15 minutes and every parent with the iPhone app gets a push notification
 - **Carpools:** share a team’s schedule with other families by invite link, assign a drop-off and pick-up driver for every event, auto-assign drives fairly, and import or export a Google Sheet
 - **Rides:** claim or release a drive, see which events still need a driver
 - **Chat:** realtime family chat

@@ -6,6 +6,13 @@
 # One-time setup (Settings > Secrets and variables > Actions > Secrets):
 #   Secret: SUPABASE_ACCESS_TOKEN  from supabase.com/dashboard/account/tokens
 # Until it is set, this workflow skips the deploy instead of failing.
+#
+# iPhone push notifications (schedule-change alerts) also need, in the
+# "NEW KEYS" environment or as repository secrets:
+#   APNS_KEY      Text of the AuthKey_XXXX.p8 file of an Apple Push Notifications key
+#   APNS_KEY_ID   That key's 10-character Key ID
+# (developer.apple.com > Certificates, IDs & Profiles > Keys). They are copied to
+# the function's secrets on each deploy; run this workflow again after adding them.
 # The project ref is public; override it with a SUPABASE_PROJECT_REF variable.
 
 name: Deploy calendar sync
@@ -24,9 +31,13 @@ permissions:
 jobs:
   deploy-function:
     runs-on: ubuntu-latest
+    # The Apple push key lives with the other Apple keys
+    environment: NEW KEYS
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'reufyrhowxxivpmobouz' }}
+      APNS_KEY: ${{ secrets.APNS_KEY }}
+      APNS_KEY_ID: ${{ secrets.APNS_KEY_ID || vars.APNS_KEY_ID }}
     steps:
       - name: Skip when not configured
         if: env.SUPABASE_ACCESS_TOKEN == '' || env.SUPABASE_PROJECT_REF == ''
@@ -49,5 +60,27 @@ jobs:
             echo "::error::SUPABASE_ACCESS_TOKEN doesn't look like a Supabase token (sbp_ followed by letters and digits). Saved value: $len characters, starts with sbp_: $([ "${SUPABASE_ACCESS_TOKEN#sbp_}" != "$SUPABASE_ACCESS_TOKEN" ] && echo yes || echo no), unexpected characters: $odd. Copy a fresh token from supabase.com/dashboard/account/tokens."
             exit 1
           fi
-          # The npm package avoids setup-cli's rate-limited GitHub API lookup
-          npx --yes supabase@latest functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF" --use-api
+          # The npm package avoids setup-cli's rate-limited GitHub API lookup.
+          # The function checks who is calling itself (a signed-in user, or the
+          # database's scheduled job with its key), so the gateway JWT check is off.
+          npx --yes supabase@latest functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF" --use-api --no-verify-jwt
+
+          # Apple push key for schedule-change notifications
+          APNS_KEY_ID="$(printf '%s' "$APNS_KEY_ID" | tr -d '[:space:]')"
+          # Keep only the key's base64 body (with or without the BEGIN/END lines)
+          KEY_BODY="$(printf '%s' "$APNS_KEY" | sed '/-----/d' | tr -d '[:space:]')"
+          if [ -z "$KEY_BODY" ]; then
+            echo "::warning::Push notifications are off: add the APNS_KEY and APNS_KEY_ID secrets (an Apple Push Notifications key), then run this workflow again."
+          elif ! [[ "$APNS_KEY_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "::error::APNS_KEY_ID should be the push key's 10-character Key ID (letters and digits)."
+            exit 1
+          elif ! [[ "$KEY_BODY" =~ ^[A-Za-z0-9+/=]{100,}$ ]]; then
+            echo "::error::APNS_KEY should be the text of the AuthKey_${APNS_KEY_ID}.p8 file (${#KEY_BODY} characters found)."
+            exit 1
+          else
+            umask 077
+            printf 'APNS_KEY=%s\nAPNS_KEY_ID=%s\n' "$KEY_BODY" "$APNS_KEY_ID" > "$RUNNER_TEMP/apns.env"
+            npx --yes supabase@latest secrets set --env-file "$RUNNER_TEMP/apns.env" --project-ref "$SUPABASE_PROJECT_REF"
+            rm -f "$RUNNER_TEMP/apns.env"
+            echo "::notice::Push notifications are on (Apple key $APNS_KEY_ID)."
+          fi
