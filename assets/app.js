@@ -33,6 +33,7 @@ const state = {
   rides: [],
   messages: [],
   attendance: [],
+  changes: [],
   tab: 'Overview',
   view: 'week',
   filter: 'all',
@@ -165,7 +166,17 @@ async function loadHouseholdData() {
   state.rides = must(rides);
   state.messages = must(messages).reverse();
   state.attendance = await fetchAttendance(hid, since);
+  state.changes = await fetchChanges(hid);
   scheduleReminders();
+}
+
+// Schedule changes found by calendar syncs in the last two weeks. Tolerant of a
+// database that doesn't have the table yet, so the app still loads.
+async function fetchChanges(hid) {
+  const { data, error } = await supabase.from('schedule_changes').select('*').eq('household_id', hid)
+    .gte('created_at', new Date(Date.now() - 14 * DAY).toISOString()).order('created_at', { ascending: false }).limit(50);
+  if (error) { console.warn('Schedule changes unavailable:', error.message); return []; }
+  return data;
 }
 
 // "Are you going?" answers for this family's recent and upcoming events.
@@ -190,6 +201,7 @@ async function reload(...tables) {
     members: async () => { state.members = must(await supabase.from('household_members').select('id, role, profile_id, profiles(id, display_name, email)').eq('household_id', hid)); },
     messages: async () => { state.messages = must(await supabase.from('messages').select('*').eq('household_id', hid).order('inserted_at', { ascending: false }).limit(200)).reverse(); },
     attendance: async () => { state.attendance = await fetchAttendance(hid, since); },
+    changes: async () => { state.changes = await fetchChanges(hid); },
   };
   await Promise.all(tables.map((t) => jobs[t]()));
   if (tables.includes('events')) scheduleReminders();
@@ -199,6 +211,7 @@ function subscribe() {
   if (state.channel) supabase.removeChannel(state.channel);
   const hid = state.household.id;
   let pending = new Set();
+  let fresh = [];
   let timer;
   const queue = (table) => {
     pending.add(table);
@@ -206,7 +219,10 @@ function subscribe() {
     timer = setTimeout(async () => {
       const tables = [...pending];
       pending = new Set();
+      const arrived = fresh;
+      fresh = [];
       try { await reload(...tables); } catch (err) { console.error(err); return; }
+      if (arrived.length) toast(`📣 ${describeChange(arrived[0])}${arrived.length > 1 ? ` (+${arrived.length - 1} more)` : ''}`);
       // Don't rebuild the chat view (and wipe a half-typed message) on background updates
       if (state.tab === 'Chat') renderMessages();
       else renderMain();
@@ -217,6 +233,7 @@ function subscribe() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `household_id=eq.${hid}` }, () => queue('messages'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rides' }, () => queue('rides'))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'event_attendance' }, () => queue('attendance'))
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'schedule_changes', filter: `household_id=eq.${hid}` }, (p) => { fresh.push(p.new); queue('changes'); })
     .subscribe();
 }
 
@@ -416,7 +433,55 @@ function overviewHTML() {
       ${checkItem(state.events.length, 'Add or import events', state.teams.length ? 'go-teams' : 'add-event')}
       ${checkItem(state.members.length > 1, 'Invite your co-parent or family', 'invite')}</ul></div>`;
 
-  return `${hero}<div class="main-grid"><div class="panel">${calendarPanelHTML()}</div><aside class="rail">${rail}</aside></div>`;
+  return `${changesBannerHTML()}${hero}<div class="main-grid"><div class="panel">${calendarPanelHTML()}</div><aside class="rail">${rail}</aside></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Schedule-change alerts
+// ---------------------------------------------------------------------------
+function changesSeenKey() { return `sidlne-changes-seen-${state.household.id}`; }
+function unseenChanges() {
+  let seen = '';
+  try { seen = localStorage.getItem(changesSeenKey()) || ''; } catch {}
+  return state.changes.filter((c) => c.created_at > seen);
+}
+
+function describeChange(c) {
+  const team = byId(state.teams, c.team_id);
+  const who = byId(state.athletes, team?.athlete_id)?.name;
+  const what = `${who ? who + ': ' : ''}${c.title}`;
+  const when = (d) => `${fmtDate(d)} ${fmtTime(d)}`;
+  if (c.kind === 'time') {
+    const sameDay = key(new Date(c.old_start)) === key(new Date(c.new_start));
+    return `${what} moved from ${when(c.old_start)} to ${sameDay ? fmtTime(c.new_start) : when(c.new_start)}`;
+  }
+  if (c.kind === 'location') return `${what} on ${fmtDate(c.new_start)} is now at ${c.new_location || 'a new location'}`;
+  if (c.kind === 'cancelled') return `${what} on ${when(c.old_start)} was cancelled`;
+  return `New: ${what} on ${when(c.new_start)}`;
+}
+
+const CHANGE_ICONS = { time: '⏰', location: '📍', cancelled: '✕', added: '✨' };
+
+function changesBannerHTML() {
+  const list = unseenChanges();
+  if (!list.length) return '';
+  return `<div class="changes-banner"><div class="changes-head"><span class="eyebrow">SCHEDULE CHANGES</span><button class="link-btn" data-action="seen-changes">Got it</button></div>
+    <ul>${list.slice(0, 5).map((c) => {
+      const text = `<i>${CHANGE_ICONS[c.kind] || '•'}</i>${esc(describeChange(c))}`;
+      return `<li class="change-${c.kind}">${c.event_id && byId(state.events, c.event_id) ? `<button class="text-btn" data-action="open-event" data-id="${c.event_id}">${text}</button>` : `<span>${text}</span>`}</li>`;
+    }).join('')}</ul>${list.length > 5 ? `<p class="more">+${list.length - 5} more changes</p>` : ''}</div>`;
+}
+
+// The most recent change to an event in the last week, for markers on the event itself
+function recentChange(eventId) {
+  const since = new Date(Date.now() - 7 * DAY).toISOString();
+  return state.changes.find((c) => c.event_id === eventId && c.created_at > since);
+}
+function changeMarker(eventId) {
+  const c = recentChange(eventId);
+  if (!c) return '';
+  const label = { time: '⏰ Time changed', location: '📍 Location changed', added: '✨ Just added' }[c.kind];
+  return label ? `<p class="changed">${label}</p>` : '';
 }
 
 function checkItem(done, label, action) {
@@ -493,7 +558,7 @@ function eventHTML(e) {
   const t = fmtTime(e.start).split(' ');
   const a = athleteOf(e), team = byId(state.teams, e.team_id);
   const ride = rideFor(e.id);
-  return `<button class="event" data-action="open-event" data-id="${e.id}"><span class="time"><strong>${esc(t[0])}</strong><small>${esc(t[1] || '')}</small></span><i class="bar" style="--c:${esc(colorOf(e))}"></i><span>${a || team?.sport ? `<small class="tag" style="--c:${esc(colorOf(e))}">${esc([a?.name, team?.sport].filter(Boolean).join(' · '))}</small>` : ''}<h3>${esc(e.title)}</h3>${team ? `<p>${esc(team.name)}</p>` : ''}${e.location ? `<p>⌖ ${esc(e.location)}</p>` : ''}${ride?.driver_profile_id ? `<p>🚗 ${esc(memberName(ride.driver_profile_id))} driving</p>` : ''}${rsvpLine(e)}</span><small class="source">${e.source === 'ical' ? 'Team calendar' : ''}</small></button>`;
+  return `<button class="event" data-action="open-event" data-id="${e.id}"><span class="time"><strong>${esc(t[0])}</strong><small>${esc(t[1] || '')}</small></span><i class="bar" style="--c:${esc(colorOf(e))}"></i><span>${a || team?.sport ? `<small class="tag" style="--c:${esc(colorOf(e))}">${esc([a?.name, team?.sport].filter(Boolean).join(' · '))}</small>` : ''}<h3>${esc(e.title)}</h3>${team ? `<p>${esc(team.name)}</p>` : ''}${e.location ? `<p>⌖ ${esc(e.location)}</p>` : ''}${ride?.driver_profile_id ? `<p>🚗 ${esc(memberName(ride.driver_profile_id))} driving</p>` : ''}${changeMarker(e.id)}${rsvpLine(e)}</span><small class="source">${e.source === 'ical' ? 'Team calendar' : ''}</small></button>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -549,7 +614,7 @@ async function invokeSync(id) {
 async function syncTeam(id, quiet) {
   let data;
   try { data = await invokeSync(id); } finally { await reload('teams').catch(() => {}); }
-  await reload('events');
+  await reload('events', 'changes');
   if (!quiet) toast(`Imported ${data.imported} ${data.imported === 1 ? 'event' : 'events'}`);
   renderMain();
 }
@@ -571,7 +636,7 @@ async function autoSync() {
     for (const t of due) {
       try { await invokeSync(t.id); } catch (err) { console.warn(`Calendar sync failed for ${t.name}:`, err.message); }
     }
-    await reload('events', 'teams');
+    await reload('events', 'teams', 'changes');
     if (state.tab !== 'Chat') renderMain();
   } catch (err) {
     console.error(err);
@@ -605,12 +670,19 @@ function openEvent(id) {
     ? `🚗 ${esc(memberName(ride.driver_profile_id))} ${ride.driver_profile_id === me ? 'are' : 'is'} driving${ride.notes ? ` · ${esc(ride.notes)}` : ''}`
     : '🚗 No driver yet';
   showModal(`<span class="eyebrow">${esc([a?.name, team?.sport].filter(Boolean).join(' · ') || 'EVENT')}</span><h2>${esc(e.title)}</h2>${team ? `<p>${esc(team.name)}</p>` : ''}
-    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}</div>
+    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}${changeDetail(e.id)}</div>
     ${rsvpHTML(e)}
     ${e.description ? `<p style="white-space:pre-wrap">${esc(e.description)}</p>` : ''}
     ${e.location ? `<div class="row-actions">${directionsButton(e.location, 'primary full')}</div>` : ''}
     <div class="row-actions">${ride?.driver_profile_id === me ? `<button class="outline" data-action="release-ride" data-id="${e.id}">I can’t drive</button>` : `<button class="primary" data-action="claim-ride" data-id="${e.id}">${ride?.driver_profile_id ? 'I’ll drive instead' : 'I’ll drive'}</button>`}
     <button class="outline" data-action="edit-event" data-id="${e.id}">Edit</button><button class="danger-btn" data-action="delete-event" data-id="${e.id}">Delete</button></div>`);
+}
+
+function changeDetail(eventId) {
+  const c = recentChange(eventId);
+  if (c?.kind === 'time') return `<div class="changed">⏰ Moved from ${esc(fmtDate(c.old_start))} ${esc(fmtTime(c.old_start))}</div>`;
+  if (c?.kind === 'location') return `<div class="changed">📍 Was at ${esc(c.old_location || 'another location')}</div>`;
+  return '';
 }
 
 function rsvpHTML(e) {
@@ -828,6 +900,7 @@ const actions = {
     if (!confirm('Delete this event for everyone in your family?')) return;
     await busy(null, async () => { must(await supabase.from('events').delete().eq('id', el.dataset.id)); await reload('events', 'rides'); closeModal(); renderMain(); toast('Event deleted'); });
   },
+  'seen-changes': () => { try { localStorage.setItem(changesSeenKey(), state.changes[0]?.created_at || new Date().toISOString()); } catch {} renderMain(); },
   'rsvp': (el) => busy(null, async () => { await setRsvp(el.dataset.event, el.dataset.athlete, el.dataset.status); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.event); }),
   'claim-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, true); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),
   'release-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, false); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),

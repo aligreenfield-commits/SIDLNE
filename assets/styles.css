@@ -312,3 +312,15 @@ a.directions,a.directions:visited{color:var(--ink)}
 /* iPhone notch / home indicator (iOS app and Home Screen web app) */
 @media(max-width:700px){.topbar{height:calc(62px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}}
 .auth-wrap,.boot{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+/* Schedule-change alerts */
+.changes-banner{background:#fff7e6;border:1px solid #f0d9a8;border-radius:12px;padding:14px 16px;margin:0 0 16px}
+.changes-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.changes-banner .eyebrow{color:#9a6a00}
+.changes-banner ul{list-style:none;margin:8px 0 0;padding:0}
+.changes-banner li{margin:6px 0;font-size:14px;line-height:1.35}
+.changes-banner li i{font-style:normal;display:inline-block;width:22px}
+.changes-banner .text-btn{text-align:left;font:inherit;color:inherit;padding:0}
+.changes-banner .change-cancelled{color:#b4472f}
+.changes-banner .more{font-size:12px;color:var(--muted);margin:6px 0 0}
+.event p.changed{color:#9a6a00;font-weight:700}
+.info .changed{color:#9a6a00;font-weight:700}
