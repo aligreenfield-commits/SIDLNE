@@ -134,11 +134,13 @@ jobs:
           # Build numbers must increase with every upload
           BUILD_NUMBER=$(( 100 + GITHUB_RUN_NUMBER ))
 
+          # Sign with an App Store (distribution) profile: a development profile would need a registered iPhone
           xcodebuild archive \
             -project ios/App/App.xcodeproj -scheme App -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/SIDLNE.xcarchive" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             "${AUTH[@]}" | tail -40
 
