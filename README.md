@@ -11,6 +11,7 @@
 - **Calendar:** week and month views, filter by athlete, add, edit and delete events
 - **Are you going?:** mark each athlete Going, Maybe or Not going for every event
 - **Schedule-change alerts:** when a team calendar moves a game, changes the field, cancels or adds an event, the whole family sees it
+- **Carpools:** share a team’s schedule with other families by invite link, assign a drop-off and pick-up driver for every event, auto-assign drives fairly, and import or export a Google Sheet
 - **Rides:** claim or release a drive, see which events still need a driver
 - **Chat:** realtime family chat
 - **Overlap alerts:** warns when two athletes need to be in different places at once

@@ -34,6 +34,12 @@ const state = {
   messages: [],
   attendance: [],
   changes: [],
+  carpools: [],
+  carpoolMembers: [],
+  carpoolRides: [],
+  carpoolId: null,
+  carpoolEvents: [],
+  carpoolChannel: null,
   tab: 'Overview',
   view: 'week',
   filter: 'all',
@@ -59,7 +65,7 @@ const TITLES = {
   Overview: ['All your sports. Zero chaos.', 'Everything coming up for your crew.'],
   Calendar: ['The whole game plan.', 'Switch between week and month views.'],
   Teams: ['One crew. Many teams.', 'Athletes, teams and their calendar links.'],
-  Rides: ['Who’s got the ride?', 'Claim a drive so everyone knows it’s covered.'],
+  Rides: ['Who’s got the ride?', 'Claim a drive, or set up a carpool with other families.'],
   Chat: ['Keep the crew in the loop.', 'Messages are shared with everyone in your family.'],
   Family: ['Your family, your rules.', 'Invite people, manage members and your account.'],
 };
@@ -167,6 +173,7 @@ async function loadHouseholdData() {
   state.messages = must(messages).reverse();
   state.attendance = await fetchAttendance(hid, since);
   state.changes = await fetchChanges(hid);
+  await loadCarpools();
   scheduleReminders();
 }
 
@@ -245,6 +252,8 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   const join = params.get('join');
   if (join) { try { sessionStorage.setItem('sidlne-join', join.toUpperCase()); } catch {} }
+  const carpool = params.get('carpool');
+  if (carpool) { try { sessionStorage.setItem(CARPOOL_KEY, carpool.toUpperCase()); } catch {} }
   if (params.has('signup')) state.authMode = 'signup'; // "Get started" links from the landing page
 
   supabase.auth.onAuthStateChange((event, session) => {
@@ -276,11 +285,18 @@ async function enter() {
         toast(`You joined ${h.name}`);
       } catch (err) { toast(friendlyError(err)); }
     }
-    if (!state.memberships.length) return renderOnboarding();
+    let carpoolCode = null;
+    try { carpoolCode = sessionStorage.getItem(CARPOOL_KEY); sessionStorage.removeItem(CARPOOL_KEY); } catch {}
+    if (carpoolCode) history.replaceState(null, '', location.pathname);
+    if (!state.memberships.length) {
+      if (carpoolCode) { try { sessionStorage.setItem(CARPOOL_KEY, carpoolCode); } catch {} }
+      return renderOnboarding();
+    }
     let saved = null;
     try { saved = localStorage.getItem(HOUSEHOLD_KEY); } catch {}
     await selectHousehold(saved);
     renderApp();
+    if (carpoolCode) carpoolJoinForm(carpoolCode);
   } catch (err) {
     console.error(err);
     root.innerHTML = `<div class="boot"><div style="text-align:center;max-width:420px;padding:20px"><h2>Something went wrong</h2><p>${esc(friendlyError(err))}</p><button class="primary" data-action="retry">Try again</button> <button class="outline" data-action="sign-out">Sign out</button></div></div>`;
@@ -558,7 +574,7 @@ function eventHTML(e) {
   const t = fmtTime(e.start).split(' ');
   const a = athleteOf(e), team = byId(state.teams, e.team_id);
   const ride = rideFor(e.id);
-  return `<button class="event" data-action="open-event" data-id="${e.id}"><span class="time"><strong>${esc(t[0])}</strong><small>${esc(t[1] || '')}</small></span><i class="bar" style="--c:${esc(colorOf(e))}"></i><span>${a || team?.sport ? `<small class="tag" style="--c:${esc(colorOf(e))}">${esc([a?.name, team?.sport].filter(Boolean).join(' · '))}</small>` : ''}<h3>${esc(e.title)}</h3>${team ? `<p>${esc(team.name)}</p>` : ''}${e.location ? `<p>⌖ ${esc(e.location)}</p>` : ''}${ride?.driver_profile_id ? `<p>🚗 ${esc(memberName(ride.driver_profile_id))} driving</p>` : ''}${changeMarker(e.id)}${rsvpLine(e)}</span><small class="source">${e.source === 'ical' ? 'Team calendar' : ''}</small></button>`;
+  return `<button class="event" data-action="open-event" data-id="${e.id}"><span class="time"><strong>${esc(t[0])}</strong><small>${esc(t[1] || '')}</small></span><i class="bar" style="--c:${esc(colorOf(e))}"></i><span>${a || team?.sport ? `<small class="tag" style="--c:${esc(colorOf(e))}">${esc([a?.name, team?.sport].filter(Boolean).join(' · '))}</small>` : ''}<h3>${esc(e.title)}</h3>${team ? `<p>${esc(team.name)}</p>` : ''}${e.location ? `<p>⌖ ${esc(e.location)}</p>` : ''}${ride?.driver_profile_id ? `<p>🚗 ${esc(memberName(ride.driver_profile_id))} driving</p>` : ''}${changeMarker(e.id)}${carpoolLine(e) ? `<p>🚙 ${esc(carpoolLine(e))}</p>` : ''}${rsvpLine(e)}</span><small class="source">${e.source === 'ical' ? 'Team calendar' : ''}</small></button>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -670,7 +686,7 @@ function openEvent(id) {
     ? `🚗 ${esc(memberName(ride.driver_profile_id))} ${ride.driver_profile_id === me ? 'are' : 'is'} driving${ride.notes ? ` · ${esc(ride.notes)}` : ''}`
     : '🚗 No driver yet';
   showModal(`<span class="eyebrow">${esc([a?.name, team?.sport].filter(Boolean).join(' · ') || 'EVENT')}</span><h2>${esc(e.title)}</h2>${team ? `<p>${esc(team.name)}</p>` : ''}
-    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}${changeDetail(e.id)}</div>
+    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}${changeDetail(e.id)}${carpoolLine(e) ? `<div>🚙 ${esc(carpoolLine(e))}</div>` : ''}</div>
     ${rsvpHTML(e)}
     ${e.description ? `<p style="white-space:pre-wrap">${esc(e.description)}</p>` : ''}
     ${e.location ? `<div class="row-actions">${directionsButton(e.location, 'primary full')}</div>` : ''}
@@ -712,11 +728,12 @@ async function setRsvp(eventId, athleteId, status) {
 // Rides
 // ---------------------------------------------------------------------------
 function ridesHTML() {
+  if (state.carpoolId) return carpoolPageHTML();
   const list = upcoming(14);
   const me = state.session.user.id;
-  if (!list.length) return '<div class="panel empty"><h3>No events in the next two weeks.</h3><p>When events are on the calendar, you can claim drives here.</p></div>';
+  if (!list.length) return `${carpoolListHTML()}<div class="panel empty"><h3>No events in the next two weeks.</h3><p>When events are on the calendar, you can claim drives here.</p></div>`;
   const open = list.filter((e) => !rideFor(e.id)?.driver_profile_id).length;
-  return `<div class="list-card"><div class="panel-head" style="padding:16px 0 4px"><h2>Next 14 days</h2><span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} NEED${open === 1 ? 'S' : ''} A DRIVER` : 'ALL COVERED'}</span></div>
+  return `${carpoolListHTML()}<div class="section-head"><h2>Family drives</h2></div><div class="list-card"><div class="panel-head" style="padding:16px 0 4px"><h2>Next 14 days</h2><span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} NEED${open === 1 ? 'S' : ''} A DRIVER` : 'ALL COVERED'}</span></div>
     ${list.map((e) => {
       const ride = rideFor(e.id), a = athleteOf(e);
       const driver = ride?.driver_profile_id;
@@ -736,6 +753,296 @@ async function claimRide(eventId, claim) {
   toast(claim ? 'You’re driving. Thanks!' : 'Ride released');
   renderMain();
 }
+
+// ---------------------------------------------------------------------------
+// Carpools: a team's schedule shared with other families, with a drop-off and
+// a pick-up driver for every event
+// ---------------------------------------------------------------------------
+const LEGS = { to: 'Drop-off', from: 'Pick-up' };
+const CARPOOL_DAYS = 30;
+const CARPOOL_KEY = 'sidlne-carpool';
+
+// Carpools you can see (your family's, and ones you joined), with members and rides.
+// Tolerant of a database without the carpool tables, so the app still loads.
+async function fetchCarpools() {
+  const { data: carpools, error } = await supabase.from('carpools').select('*').order('created_at');
+  if (error) { console.warn('Carpools unavailable:', error.message); return { carpools: [], members: [], rides: [] }; }
+  if (!carpools.length) return { carpools: [], members: [], rides: [] };
+  const ids = carpools.map((c) => c.id);
+  const [members, rides] = await Promise.all([
+    supabase.from('carpool_members').select('*').in('carpool_id', ids).order('created_at'),
+    supabase.from('carpool_rides').select('*').in('carpool_id', ids),
+  ]);
+  return { carpools, members: must(members), rides: must(rides) };
+}
+
+async function loadCarpools() {
+  const r = await fetchCarpools();
+  state.carpools = r.carpools;
+  state.carpoolMembers = r.members;
+  state.carpoolRides = r.rides;
+}
+
+function carpoolMember(id) { return state.carpoolMembers.find((m) => m.id === id); }
+function myCarpoolMember(cid) { return state.carpoolMembers.find((m) => m.carpool_id === cid && m.profile_id === state.session.user.id); }
+function carpoolDriver(cid, eventId, leg) {
+  const r = state.carpoolRides.find((x) => x.carpool_id === cid && x.event_id === eventId && x.leg === leg);
+  return r?.driver_member_id ? carpoolMember(r.driver_member_id) : null;
+}
+function ownsCarpool(c) { return c.household_id === state.household?.id; }
+
+// "Dana drops off · Lee picks up" for an event in one of your family's carpools
+function carpoolLine(e) {
+  const c = state.carpools.find((x) => x.team_id === e.team_id && ownsCarpool(x));
+  if (!c) return '';
+  const to = carpoolDriver(c.id, e.id, 'to'), from = carpoolDriver(c.id, e.id, 'from');
+  if (!to && !from) return '';
+  return [to && `${to.name} drops off`, from && `${from.name} picks up`].filter(Boolean).join(' · ');
+}
+
+function carpoolListHTML() {
+  const cards = state.carpools.map((c) => {
+    const n = state.carpoolMembers.filter((m) => m.carpool_id === c.id).length;
+    return `<button class="carpool-card" data-action="open-carpool" data-id="${c.id}"><strong>🚙 ${esc(c.name)}</strong><span class="sub">${n} ${n === 1 ? 'driver' : 'drivers'}${ownsCarpool(c) ? '' : ' · shared with you'}</span><span class="go">Open →</span></button>`;
+  }).join('');
+  return `<div class="section"><div class="section-head"><h2>Carpools</h2><div class="head-actions">${state.teams.length ? '<button class="outline" data-action="new-carpool">＋ Start a carpool</button>' : ''}<button class="link-btn" data-action="join-carpool">Join with a code</button></div></div>
+    ${cards ? `<div class="carpool-cards">${cards}</div>` : '<p class="subtitle">Share a team’s schedule with other parents and take turns driving. Start one for a team, or join one with a code.</p>'}</div>`;
+}
+
+async function carpoolSchedule(cid) {
+  const { data, error } = await supabase.rpc('carpool_schedule', { cid });
+  if (error) throw error;
+  const until = Date.now() + CARPOOL_DAYS * DAY;
+  return data.filter((e) => new Date(e.start) <= until);
+}
+
+async function openCarpool(id) {
+  state.carpoolId = id;
+  state.carpoolEvents = await carpoolSchedule(id);
+  subscribeCarpool(id);
+  if (state.tab !== 'Rides') go('Rides'); else renderMain();
+}
+
+function closeCarpool() {
+  state.carpoolId = null;
+  if (state.carpoolChannel) { supabase.removeChannel(state.carpoolChannel); state.carpoolChannel = null; }
+  renderMain();
+}
+
+function subscribeCarpool(id) {
+  if (state.carpoolChannel) supabase.removeChannel(state.carpoolChannel);
+  let timer;
+  const refresh = () => { clearTimeout(timer); timer = setTimeout(async () => { try { await loadCarpools(); if (state.carpoolId === id && state.tab === 'Rides') renderMain(); } catch (err) { console.error(err); } }, 250); };
+  state.carpoolChannel = supabase.channel(`carpool-${id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'carpool_rides', filter: `carpool_id=eq.${id}` }, refresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'carpool_members', filter: `carpool_id=eq.${id}` }, refresh)
+    .subscribe();
+}
+
+function carpoolPageHTML() {
+  const c = state.carpools.find((x) => x.id === state.carpoolId);
+  if (!c) { state.carpoolId = null; return ridesHTML(); }
+  const members = state.carpoolMembers.filter((m) => m.carpool_id === c.id);
+  const me = myCarpoolMember(c.id);
+  const events = state.carpoolEvents || [];
+  const open = events.reduce((n, e) => n + Object.keys(LEGS).filter((leg) => !carpoolDriver(c.id, e.id, leg)).length, 0);
+  const options = (sel) => `<option value="">— Needs a driver —</option>${members.map((m) => `<option value="${m.id}" ${sel?.id === m.id ? 'selected' : ''}>${esc(m.name)}${m.id === me?.id ? ' (me)' : ''}</option>`).join('')}`;
+  const rows = events.length ? events.map((e) => `<div class="carpool-row"><div class="when"><strong>${esc(fmtDate(e.start))}</strong><span>${esc(fmtTime(e.start))}</span></div>
+      <div class="what"><strong>${esc(e.title)}</strong>${e.location ? `<span>⌖ ${esc(e.location)}</span>` : ''}</div>
+      ${Object.entries(LEGS).map(([leg, label]) => {
+        const d = carpoolDriver(c.id, e.id, leg);
+        return `<label class="leg ${d ? (d.id === me?.id ? 'mine' : 'set') : 'open'}"><span>${label}</span><select data-change="carpool-ride" data-carpool="${c.id}" data-event="${e.id}" data-leg="${leg}">${options(d)}</select></label>`;
+      }).join('')}</div>`).join('')
+    : `<div class="empty"><h3>No events in the next ${CARPOOL_DAYS} days.</h3><p>Events from the team’s calendar show up here automatically.</p></div>`;
+  return `<button class="link-btn" data-action="close-carpool">← All rides</button>
+    <div class="carpool-head"><div><span class="eyebrow">CARPOOL</span><h2>🚙 ${esc(c.name)}</h2><p class="subtitle">Next ${CARPOOL_DAYS} days · <span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} ${open === 1 ? 'DRIVE' : 'DRIVES'} OPEN` : 'ALL COVERED'}</span></p></div>
+      <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-import" data-id="${c.id}">Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button></div></div>
+    <div class="section"><div class="section-head"><h2>Drivers</h2><div class="head-actions">${me ? `<button class="link-btn" data-action="carpool-me" data-id="${c.id}">Edit my info</button>` : `<button class="outline" data-action="carpool-me" data-id="${c.id}">＋ Add me as a driver</button>`}${ownsCarpool(c) ? `<button class="link-btn" data-action="carpool-add-parent" data-id="${c.id}">＋ Add a parent</button>` : ''}</div></div>
+      <div class="athlete-chips">${members.length ? members.map((m) => `<span class="athlete-chip">${esc(m.name)}${m.seats != null ? ` · ${m.seats} ${m.seats === 1 ? 'seat' : 'seats'}` : ''}${m.phone ? ` · <a href="tel:${esc(m.phone.replace(/[^\d+]/g, ''))}">${esc(m.phone)}</a>` : ''}${m.profile_id ? '' : ' <small class="sub">(not joined)</small>'}</span>`).join('') : '<p class="subtitle">No drivers yet. Invite the other parents.</p>'}</div></div>
+    <div class="panel carpool-grid">${rows}</div>
+    ${ownsCarpool(c) ? `<div class="row-actions"><button class="danger-btn" data-action="delete-carpool" data-id="${c.id}">Delete carpool</button></div>` : me ? `<div class="row-actions"><button class="danger-btn" data-action="leave-carpool" data-id="${c.id}">Leave carpool</button></div>` : ''}`;
+}
+
+function carpoolForm() {
+  showModal(`<span class="eyebrow">NEW CARPOOL</span><h2>Start a carpool</h2><p>Other parents join with an invite link and see this team’s schedule. Everyone can sign up to drive.</p>
+    <form class="form" data-form="carpool"><label>Team<select name="team_id" required>${state.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>
+    <label>Carpool name (optional)<input name="name" maxlength="80" placeholder="e.g. Hawks U12 carpool"></label>
+    <button class="primary full" type="submit">Create carpool</button></form>`);
+}
+
+function carpoolMeForm(cid) {
+  const m = myCarpoolMember(cid);
+  showModal(`<span class="eyebrow">CARPOOL</span><h2>${m ? 'Your driver info' : 'Add me as a driver'}</h2>
+    <form class="form" data-form="carpool-me" data-id="${cid}"><label>Name<input name="name" required maxlength="60" value="${esc(m?.name || state.profile?.display_name || '')}"></label>
+    <div class="form-grid"><label>Phone (optional)<input name="phone" type="tel" maxlength="30" value="${esc(m?.phone || '')}"></label><label>Seats for kids<input name="seats" type="number" min="0" max="12" value="${m?.seats ?? ''}"></label></div>
+    <button class="primary full" type="submit">Save</button></form>`);
+}
+
+function carpoolAddParentForm(cid) {
+  showModal(`<span class="eyebrow">CARPOOL</span><h2>Add a parent</h2><p>Add someone who hasn’t joined yet so you can assign them drives. When they join with the invite link using the same name, the drives become theirs.</p>
+    <form class="form" data-form="carpool-parent" data-id="${cid}"><label>Name<input name="name" required maxlength="60"></label><label>Phone (optional)<input name="phone" type="tel" maxlength="30"></label>
+    <button class="primary full" type="submit">Add parent</button></form>`);
+}
+
+function carpoolJoinForm(code = '') {
+  showModal(`<span class="eyebrow">CARPOOL</span><h2>Join a carpool</h2><p>Enter the code another parent shared with you.</p>
+    <form class="form" data-form="join-carpool"><label>Carpool code<input name="code" required maxlength="20" value="${esc(code)}" style="text-transform:uppercase"></label>
+    <label>Your name<input name="name" required maxlength="60" value="${esc(state.profile?.display_name || '')}"></label>
+    <div class="form-grid"><label>Phone (optional)<input name="phone" type="tel" maxlength="30"></label><label>Seats for kids<input name="seats" type="number" min="0" max="12"></label></div>
+    <button class="primary full" type="submit">Join carpool</button></form>`);
+}
+
+function carpoolImportForm(cid) {
+  showModal(`<span class="eyebrow">IMPORT</span><h2>Import from Google Sheets</h2>
+    <p>Use a sheet with a <b>Date</b> column and driver columns such as <b>Drop-off</b> and <b>Pick-up</b> (or one <b>Driver</b> column). Names are matched to drivers, and new names are added.</p>
+    <form class="form" data-form="carpool-import" data-id="${cid}">
+      <label>Spreadsheet file (.csv)<input name="file" type="file" accept=".csv,.tsv,.txt,text/csv"><small class="hint">In Google Sheets: File → Download → Comma-separated values (.csv).</small></label>
+      <label>…or a Google Sheets link<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…"><small class="hint">The sheet must be shared as “Anyone with the link can view”.</small></label>
+      <button class="primary full" type="submit">Import</button></form>`);
+}
+
+async function setCarpoolRide(cid, eventId, leg, memberId) {
+  if (memberId) {
+    must(await supabase.from('carpool_rides').upsert({ carpool_id: cid, event_id: eventId, leg, driver_member_id: memberId, updated_by: state.session.user.id, updated_at: new Date().toISOString() }, { onConflict: 'carpool_id,event_id,leg' }));
+  } else {
+    must(await supabase.from('carpool_rides').delete().eq('carpool_id', cid).eq('event_id', eventId).eq('leg', leg));
+  }
+  await loadCarpools();
+}
+
+// Fill open drives so everyone drives about the same number of times
+function planAutofill(cid) {
+  const drivers = state.carpoolMembers.filter((m) => m.carpool_id === cid && m.seats !== 0);
+  if (!drivers.length) return [];
+  const count = new Map(drivers.map((m) => [m.id, 0]));
+  for (const r of state.carpoolRides) if (r.carpool_id === cid && count.has(r.driver_member_id)) count.set(r.driver_member_id, count.get(r.driver_member_id) + 1);
+  const plan = [];
+  for (const e of state.carpoolEvents || []) {
+    for (const leg of Object.keys(LEGS)) {
+      if (carpoolDriver(cid, e.id, leg)) continue;
+      const other = plan.find((p) => p.event_id === e.id)?.driver_member_id || carpoolDriver(cid, e.id, leg === 'to' ? 'from' : 'to')?.id;
+      const pick = [...drivers].sort((a, b) => (count.get(a.id) - count.get(b.id)) || ((a.id === other) - (b.id === other)))[0];
+      count.set(pick.id, count.get(pick.id) + 1);
+      plan.push({ carpool_id: cid, event_id: e.id, leg, driver_member_id: pick.id, updated_by: state.session.user.id });
+    }
+  }
+  return plan;
+}
+
+// --- Spreadsheet import / export -------------------------------------------
+function parseCsv(text) {
+  const delim = (text.split('\n')[0].match(/\t/g) || []).length > (text.split('\n')[0].match(/,/g) || []).length ? '\t' : ',';
+  const rows = [];
+  let row = [], cell = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') quoted = false; else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === delim) { row.push(cell.trim()); cell = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell.trim()); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell.trim()); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c));
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+// A date written the way people type them in a sheet, as a local day key
+function sheetDateKey(s) {
+  s = String(s || '').trim().toLowerCase();
+  if (!s) return null;
+  const now = new Date();
+  let m;
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) return key(new Date(+m[1], m[2] - 1, +m[3], 12));
+  if ((m = /(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?/.exec(s))) {
+    let y = m[3] ? +m[3] : now.getFullYear();
+    if (y < 100) y += 2000;
+    const d = new Date(y, m[1] - 1, +m[2], 12);
+    if (!m[3] && d < now - 60 * DAY) d.setFullYear(y + 1);
+    return key(d);
+  }
+  if ((m = /([a-z]{3})[a-z]*\.?\s+(\d{1,2})(?:\D+(\d{4}))?/.exec(s)) && MONTHS.includes(m[1])) {
+    const d = new Date(m[3] ? +m[3] : now.getFullYear(), MONTHS.indexOf(m[1]), +m[2], 12);
+    if (!m[3] && d < now - 60 * DAY) d.setFullYear(d.getFullYear() + 1);
+    return key(d);
+  }
+  return null;
+}
+
+async function importCarpoolSheet(cid, text) {
+  const rows = parseCsv(text);
+  const headerAt = rows.findIndex((r) => r.some((c) => /date|day/i.test(c)));
+  if (headerAt < 0) throw new Error('Couldn’t find a “Date” column in that sheet.');
+  const head = rows[headerAt].map((h) => h.toLowerCase());
+  const col = (re) => head.findIndex((h) => re.test(h));
+  const cDate = col(/date|day/), cTime = col(/time|start/), cTitle = col(/event|game|practice|title|what/);
+  let cTo = col(/drop|^to\b|there|morning|am\b/), cFrom = col(/pick|from|back|home|return|pm\b/);
+  const cDriver = col(/driver|who|parent/);
+  if (cTo < 0 && cFrom < 0 && cDriver < 0) throw new Error('Couldn’t find driver columns (for example “Drop-off”, “Pick-up” or “Driver”).');
+  if (cTo < 0 && cFrom < 0) cTo = cFrom = cDriver;
+
+  const events = state.carpoolEvents || [];
+  const members = state.carpoolMembers.filter((m) => m.carpool_id === cid);
+  const added = [];
+  const findMember = async (name) => {
+    const n = name.trim().replace(/\s+/g, ' ');
+    if (!n || /^(-+|tbd|n\/?a|none|\?)$/i.test(n)) return null;
+    const lower = n.toLowerCase();
+    let m = members.find((x) => x.name.toLowerCase() === lower) || members.find((x) => x.name.toLowerCase().split(' ')[0] === lower.split(' ')[0]);
+    if (m) return m;
+    m = must(await supabase.from('carpool_members').insert({ carpool_id: cid, name: n.slice(0, 60) }).select().single());
+    members.push(m); added.push(n);
+    return m;
+  };
+
+  const upserts = [];
+  let skipped = 0;
+  for (const r of rows.slice(headerAt + 1)) {
+    const dk = sheetDateKey(r[cDate]);
+    let candidates = dk ? events.filter((e) => key(new Date(e.start)) === dk) : [];
+    if (candidates.length > 1 && cTitle >= 0 && r[cTitle]) {
+      const t = r[cTitle].toLowerCase();
+      const byTitle = candidates.filter((e) => e.title.toLowerCase().includes(t) || t.includes(e.title.toLowerCase()));
+      if (byTitle.length) candidates = byTitle;
+    }
+    if (candidates.length > 1 && cTime >= 0 && r[cTime]) {
+      const t = r[cTime].toLowerCase().replace(/\s/g, '');
+      const byTime = candidates.filter((e) => fmtTime(e.start).toLowerCase().replace(/\s/g, '').startsWith(t.replace(/:00/, '')) || fmtTime(e.start).toLowerCase().replace(/\s/g, '') === t);
+      if (byTime.length) candidates = byTime;
+    }
+    const e = candidates[0];
+    if (!e) { if (dk) skipped++; continue; }
+    for (const [leg, c] of [['to', cTo], ['from', cFrom]]) {
+      if (c < 0 || !r[c]) continue;
+      const m = await findMember(r[c]);
+      if (m) upserts.push({ carpool_id: cid, event_id: e.id, leg, driver_member_id: m.id, updated_by: state.session.user.id });
+    }
+  }
+  const unique = [...new Map(upserts.map((u) => [`${u.event_id}|${u.leg}`, u])).values()];
+  if (unique.length) must(await supabase.from('carpool_rides').upsert(unique, { onConflict: 'carpool_id,event_id,leg' }));
+  await loadCarpools();
+  return { rides: unique.length, added, skipped };
+}
+
+function googleSheetCsvUrl(url) {
+  const m = /docs\.google\.com\/spreadsheets\/d\/([^/]+)/.exec(url);
+  if (!m) return url;
+  if (m[1] === 'e') return url.replace(/\/pubhtml.*$|\/pub\?.*$/, '/pub?output=csv');
+  const gid = /[#&?]gid=(\d+)/.exec(url)?.[1];
+  return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${gid ? `&gid=${gid}` : ''}`;
+}
+
+function carpoolCsv(cid) {
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [['Date', 'Time', 'Event', 'Location', 'Drop-off', 'Pick-up'].map(q).join(',')];
+  for (const e of state.carpoolEvents || []) {
+    lines.push([fmtDate(e.start), fmtTime(e.start), e.title, e.location, carpoolDriver(cid, e.id, 'to')?.name, carpoolDriver(cid, e.id, 'from')?.name].map(q).join(','));
+  }
+  return lines.join('\n');
+}
+
+function carpoolInviteLink(c) { return `${PUBLIC_URL}?carpool=${encodeURIComponent(c.invite_code)}`; }
 
 // ---------------------------------------------------------------------------
 // Chat
@@ -900,6 +1207,47 @@ const actions = {
     if (!confirm('Delete this event for everyone in your family?')) return;
     await busy(null, async () => { must(await supabase.from('events').delete().eq('id', el.dataset.id)); await reload('events', 'rides'); closeModal(); renderMain(); toast('Event deleted'); });
   },
+  'open-carpool': (el) => busy(null, () => openCarpool(el.dataset.id)),
+  'close-carpool': () => closeCarpool(),
+  'new-carpool': () => carpoolForm(),
+  'join-carpool': () => carpoolJoinForm(),
+  'carpool-me': (el) => carpoolMeForm(el.dataset.id),
+  'carpool-add-parent': (el) => carpoolAddParentForm(el.dataset.id),
+  'carpool-import': (el) => carpoolImportForm(el.dataset.id),
+  'share-carpool': async (el) => {
+    const c = state.carpools.find((x) => x.id === el.dataset.id);
+    const url = carpoolInviteLink(c);
+    const text = `Join our "${c.name}" carpool on SIDLNE to see the schedule and sign up to drive. Code: ${c.invite_code}`;
+    if (Plugins.Share) { try { await Plugins.Share.share({ title: 'Join our carpool', text, url, dialogTitle: 'Invite parents' }); } catch {} return; }
+    if (navigator.share) { try { await navigator.share({ title: 'Join our carpool', text, url }); } catch {} } else copyText(url);
+  },
+  'carpool-autofill': (el) => busy(null, async () => {
+    const plan = planAutofill(el.dataset.id);
+    if (!plan.length) { toast(state.carpoolMembers.some((m) => m.carpool_id === el.dataset.id) ? 'Every drive already has a driver' : 'Add drivers first'); return; }
+    must(await supabase.from('carpool_rides').upsert(plan, { onConflict: 'carpool_id,event_id,leg' }));
+    await loadCarpools();
+    toast(`Assigned ${plan.length} ${plan.length === 1 ? 'drive' : 'drives'}`);
+    renderMain();
+  }),
+  'carpool-export': async (el) => {
+    const c = state.carpools.find((x) => x.id === el.dataset.id);
+    const csv = carpoolCsv(c.id);
+    if (Plugins.Share) { try { await Plugins.Share.share({ title: `${c.name} schedule`, text: csv, dialogTitle: 'Export carpool' }); } catch {} return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `${c.name.replace(/[^\w -]+/g, '').trim() || 'carpool'}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('Downloaded. Open it with Google Sheets: File → Import.');
+  },
+  'delete-carpool': async (el) => {
+    if (!confirm('Delete this carpool for everyone?')) return;
+    await busy(null, async () => { must(await supabase.from('carpools').delete().eq('id', el.dataset.id)); await loadCarpools(); closeCarpool(); toast('Carpool deleted'); });
+  },
+  'leave-carpool': async (el) => {
+    if (!confirm('Leave this carpool? Your drives will be unassigned.')) return;
+    await busy(null, async () => { must(await supabase.from('carpool_members').delete().eq('carpool_id', el.dataset.id).eq('profile_id', state.session.user.id)); await loadCarpools(); closeCarpool(); toast('You left the carpool'); });
+  },
   'seen-changes': () => { try { localStorage.setItem(changesSeenKey(), state.changes[0]?.created_at || new Date().toISOString()); } catch {} renderMain(); },
   'rsvp': (el) => busy(null, async () => { await setRsvp(el.dataset.event, el.dataset.athlete, el.dataset.status); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.event); }),
   'claim-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, true); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),
@@ -953,6 +1301,57 @@ const actions = {
 };
 
 const forms = {
+  carpool: async (f) => {
+    const team = byId(state.teams, f.get('team_id'));
+    const c = must(await supabase.from('carpools').insert({ household_id: state.household.id, team_id: team.id, name: f.get('name').trim() || `${team.name} carpool`, created_by: state.session.user.id }).select().single());
+    must(await supabase.from('carpool_members').insert({ carpool_id: c.id, profile_id: state.session.user.id, name: state.profile?.display_name || state.session.user.email.split('@')[0] }));
+    await loadCarpools();
+    closeModal();
+    await openCarpool(c.id);
+    toast('Carpool created. Invite the other parents!');
+  },
+  'carpool-me': async (f, form) => {
+    const cid = form.dataset.id;
+    const values = { name: f.get('name').trim(), phone: f.get('phone').trim() || null, seats: f.get('seats') === '' ? null : +f.get('seats') };
+    const m = myCarpoolMember(cid);
+    if (m) must(await supabase.from('carpool_members').update(values).eq('id', m.id));
+    else must(await supabase.rpc('join_carpool', { code: state.carpools.find((c) => c.id === cid).invite_code, member_name: values.name, member_phone: values.phone, member_seats: values.seats }));
+    await loadCarpools();
+    closeModal();
+    renderMain();
+  },
+  'carpool-parent': async (f, form) => {
+    must(await supabase.from('carpool_members').insert({ carpool_id: form.dataset.id, name: f.get('name').trim(), phone: f.get('phone').trim() || null }));
+    await loadCarpools();
+    closeModal();
+    renderMain();
+  },
+  'join-carpool': async (f) => {
+    const seats = f.get('seats');
+    const c = must(await supabase.rpc('join_carpool', { code: f.get('code').trim(), member_name: f.get('name').trim(), member_phone: f.get('phone').trim() || null, member_seats: seats === '' ? null : +seats }));
+    await loadCarpools();
+    closeModal();
+    await openCarpool(c.id);
+    toast(`You joined ${c.name}`);
+  },
+  'carpool-import': async (f, form) => {
+    const cid = form.dataset.id;
+    const file = f.get('file');
+    let text = '';
+    if (file && file.size) text = await file.text();
+    else if (f.get('url').trim()) {
+      try {
+        const res = await fetch(googleSheetCsvUrl(f.get('url').trim()));
+        if (!res.ok) throw new Error();
+        text = await res.text();
+        if (/^\s*</.test(text)) throw new Error();
+      } catch { throw new Error('Couldn’t read that link. In Google Sheets choose File → Download → Comma-separated values (.csv), then upload the file here.'); }
+    } else throw new Error('Choose a file or paste a link.');
+    const r = await importCarpoolSheet(cid, text);
+    closeModal();
+    renderMain();
+    toast(`Imported ${r.rides} ${r.rides === 1 ? 'drive' : 'drives'}${r.added.length ? `, added ${r.added.join(', ')}` : ''}${r.skipped ? ` · ${r.skipped} rows didn’t match an event` : ''}`);
+  },
   signin: async (f) => {
     must(await supabase.auth.signInWithPassword({ email: f.get('email').trim(), password: f.get('password') }));
     state.session = (await supabase.auth.getSession()).data.session;
@@ -1079,6 +1478,12 @@ document.addEventListener('click', (ev) => {
   }
   const fn = actions[el.dataset.action];
   if (fn) { ev.preventDefault(); fn(el); }
+});
+
+document.addEventListener('change', (ev) => {
+  const el = ev.target.closest('[data-change="carpool-ride"]');
+  if (!el) return;
+  busy(null, async () => { await setCarpoolRide(el.dataset.carpool, el.dataset.event, el.dataset.leg, el.value || null); renderMain(); });
 });
 
 document.addEventListener('submit', (ev) => {

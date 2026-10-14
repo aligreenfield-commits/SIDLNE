@@ -324,3 +324,23 @@ a.directions,a.directions:visited{color:var(--ink)}
 .changes-banner .more{font-size:12px;color:var(--muted);margin:6px 0 0}
 .event p.changed{color:#9a6a00;font-weight:700}
 .info .changed{color:#9a6a00;font-weight:700}
+.head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.carpool-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.carpool-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:16px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);text-align:left;cursor:pointer}
+.carpool-card:hover{border-color:var(--green)}
+.carpool-card .sub{font-size:13px;color:var(--muted)}
+.carpool-card .go{font-size:13px;font-weight:700;color:var(--green);margin-top:6px}
+.carpool-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin:10px 0 18px}
+.carpool-head h2{margin:4px 0}
+.carpool-head .row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.carpool-grid{padding:4px 18px;margin-bottom:18px}
+.carpool-row{display:grid;grid-template-columns:110px 1fr 190px 190px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.carpool-row:last-child{border-bottom:0}
+.carpool-row .when,.carpool-row .what{display:flex;flex-direction:column;gap:2px;min-width:0}
+.carpool-row .when span,.carpool-row .what span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.leg{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.leg select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;text-transform:none;letter-spacing:0;font-weight:600;background:#fff;color:var(--ink)}
+.leg.open select{border-color:#e0b4a6;background:#fdf3ef;color:#b4472f}
+.leg.set select{border-color:var(--line)}
+.leg.mine select{border-color:var(--green);background:#eef6e3;color:var(--green)}
+@media(max-width:700px){.carpool-row{grid-template-columns:1fr 1fr}.carpool-row .what{grid-column:2}.carpool-head{align-items:flex-start}.carpool-grid{padding:4px 14px}}
