@@ -8,6 +8,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { type IcsEvent, parseIcs } from "./ics.ts";
+import { detectChanges, type SavedEvent } from "./changes.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -46,7 +47,7 @@ Deno.serve(async (req) => {
 
   const { data: team, error: teamError } = await supabase
     .from("teams")
-    .select("id, household_id, athlete_id, calendar_url")
+    .select("id, household_id, athlete_id, calendar_url, last_synced_at")
     .eq("id", teamId)
     .maybeSingle();
   if (teamError) return json({ error: teamError.message }, 400);
@@ -111,6 +112,15 @@ Deno.serve(async (req) => {
     created_by: auth.user.id,
   }));
 
+  // Snapshot of the upcoming events already saved, to spot what changed
+  const { data: savedData } = await supabase
+    .from("events")
+    .select("id, external_uid, title, start, location")
+    .eq("team_id", team.id)
+    .eq("source", "ical")
+    .gte("start", new Date(now).toISOString());
+  const saved = (savedData ?? []) as SavedEvent[];
+
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await supabase
       .from("events")
@@ -120,17 +130,37 @@ Deno.serve(async (req) => {
 
   // Remove future imported events that the feed no longer contains (cancellations)
   const keep = new Set(rows.map((r) => r.external_uid));
-  const { data: existing } = await supabase
-    .from("events")
-    .select("id, external_uid")
-    .eq("team_id", team.id)
-    .eq("source", "ical")
-    .gte("start", new Date(now).toISOString());
-  const stale = (existing ?? []).filter((e) => !keep.has(e.external_uid)).map((e) => e.id);
+  const stale = saved.filter((e) => !keep.has(e.external_uid)).map((e) => e.id);
   if (stale.length) await supabase.from("events").delete().in("id", stale);
+
+  // Schedule-change alerts (skipped on a team's first import, when everything is new)
+  let changed = 0;
+  if (team.last_synced_at) {
+    const changes = detectChanges(saved, rows, now);
+    const addedUids = changes.filter((c) => c.kind === "added").map((c) => c.event_uid);
+    const ids = new Map<string, string>();
+    if (addedUids.length) {
+      const { data } = await supabase.from("events").select("id, external_uid").eq("team_id", team.id).in("external_uid", addedUids);
+      for (const e of data ?? []) ids.set(e.external_uid, e.id);
+    }
+    if (changes.length) {
+      const { error } = await supabase.from("schedule_changes").insert(changes.map((c) => ({
+        household_id: team.household_id,
+        team_id: team.id,
+        event_id: c.event_id ?? ids.get(c.event_uid) ?? null,
+        kind: c.kind,
+        title: c.title,
+        old_start: c.old_start,
+        new_start: c.new_start,
+        old_location: c.old_location,
+        new_location: c.new_location,
+      })));
+      if (!error) changed = changes.length;
+    }
+  }
 
   await supabase.from("teams").update({ last_synced_at: new Date().toISOString() }).eq("id", team.id);
   await supabase.from("teams").update({ last_sync_error: null }).eq("id", team.id);
 
-  return json({ imported: rows.length, removed: stale.length });
+  return json({ imported: rows.length, removed: stale.length, changed });
 });
