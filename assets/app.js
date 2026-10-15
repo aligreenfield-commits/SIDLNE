@@ -57,6 +57,7 @@ const icons = {
   Overview: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
   Calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>',
   Teams: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7M16 4c3 0 5 2 5 5s-2 5-5 5"/></svg>',
+  Apps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>',
   Rides: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14l-1.5-6h-11zM7 11l2-5h6l2 5"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>',
   Chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>',
   Family: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
@@ -65,7 +66,8 @@ const NAV = Object.keys(icons);
 const TITLES = {
   Overview: ['All your sports. Zero chaos.', 'Everything coming up for your crew.'],
   Calendar: ['The whole game plan.', 'Switch between week and month views.'],
-  Teams: ['Bring it all together.', 'Every team app, synced into one family calendar.'],
+  Teams: ['One crew. Many teams.', 'Athletes, teams and where their schedules come from.'],
+  Apps: ['Bring it all together.', 'Every team app, synced into one family calendar.'],
   Rides: ['Who’s got the ride?', 'Claim a drive, or set up a carpool with other families.'],
   Chat: ['Keep the crew in the loop.', 'Messages are shared with everyone in your family.'],
   Family: ['Your family, your rules.', 'Invite people, manage members and your account.'],
@@ -391,7 +393,7 @@ function renderMain() {
   const navHTML = NAV.map((n) => `<button class="${tab === n ? 'active' : ''}" data-action="go" data-tab="${n}">${icons[n]}<span>${n}</span></button>`).join('');
   document.getElementById('sideNav').innerHTML = navHTML;
   document.getElementById('mobileNav').innerHTML = navHTML;
-  const views = { Overview: overviewHTML, Calendar: calendarPageHTML, Teams: teamsHTML, Rides: ridesHTML, Chat: chatHTML, Family: familyHTML };
+  const views = { Overview: overviewHTML, Calendar: calendarPageHTML, Teams: teamsHTML, Apps: appsPageHTML, Rides: ridesHTML, Chat: chatHTML, Family: familyHTML };
   document.getElementById('main').innerHTML = views[tab]();
   if (tab === 'Chat') scrollChat();
 }
@@ -428,15 +430,28 @@ function conflicts(list) {
   return out;
 }
 
+// Bold black hero card: lime eyebrow, big tight headline
+function heroCard({ eyebrow, title, text = '', extra = '', actions = '', ghost = '' }) {
+  return `<div class="hero-card">${ghost ? `<span class="ghost">${esc(ghost)}</span>` : ''}<span class="eyebrow">${esc(eyebrow)}</span><h2>${title}</h2>${extra}${text ? `<p>${text}</p>` : ''}${actions ? `<div class="row-actions">${actions}</div>` : ''}</div>`;
+}
+
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+function connectedApps() {
+  return [...new Set(state.teams.filter((t) => t.calendar_url).map((t) => calendarSource(t.calendar_url) || 'Team calendar'))];
+}
+function appBadge(n) {
+  return `<span class="app-logo" title="${esc(n)}">${esc(APP_ABBR[n] || n.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase())}</span>`;
+}
+
 // "One place beats five.": the family's connected team apps as badges
 function onePlaceCard(synced, teamCount) {
-  const apps = [...new Set(state.teams.filter((t) => t.calendar_url).map((t) => calendarSource(t.calendar_url) || 'Team calendar'))];
+  const apps = connectedApps();
   const badges = apps.length ? apps : ['TeamSnap', 'SportsEngine', 'LeagueApps', 'GameChanger', 'Sports Connect', 'Crossbar'];
-  const badge = (n) => `<span class="app-logo" title="${esc(n)}">${esc(APP_ABBR[n] || n.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase())}</span>`;
+  const badge = appBadge;
   const text = synced
     ? `${synced} of ${teamCount} ${teamCount === 1 ? 'team syncs' : 'teams sync'} automatically from ${apps.length === 1 ? esc(apps[0]) : `${apps.length} apps`}.`
     : 'Paste a team’s calendar link from TeamSnap, SportsEngine, LeagueApps and more, and SIDLNE keeps it in sync.';
-  return `<div class="rail-card one-place"><h2>One place beats ${apps.length > 1 ? (['', '', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][apps.length] || apps.length) : 'five'}.</h2><div class="app-badges">${badges.map(badge).join('')}</div><p>${text}</p><button class="link-btn" data-action="go" data-tab="Teams">${apps.length ? 'See your apps →' : 'Connect a team app →'}</button></div>`;
+  return `<div class="rail-card one-place"><h2>One place beats ${apps.length > 1 ? (NUMBER_WORDS[apps.length] || apps.length) : 'five'}.</h2><div class="app-badges">${badges.map(badge).join('')}</div><p>${text}</p><button class="link-btn" data-action="go" data-tab="Apps">${apps.length ? 'See your apps →' : 'Connect a team app →'}</button></div>`;
 }
 
 function overviewHTML() {
@@ -637,6 +652,20 @@ function appsHTML() {
     <div class="row-actions"><button class="primary" data-action="add-team">＋ Connect a team app</button></div></div>`;
 }
 
+function appsPageHTML() {
+  const apps = connectedApps();
+  const synced = state.teams.filter((t) => t.calendar_url).length;
+  const badges = apps.length ? apps : ['TeamSnap', 'SportsEngine', 'LeagueApps', 'GameChanger', 'Sports Connect', 'Crossbar'];
+  const title = apps.length > 1 ? `${esc(NUMBER_WORDS[apps.length] || String(apps.length)).replace(/^./, (c) => c.toUpperCase())} apps.<br>One calendar.`
+    : apps.length ? 'One app down.<br>Bring the rest.' : 'Five apps?<br>Make it one.';
+  const text = synced
+    ? `${synced} of ${state.teams.length} ${state.teams.length === 1 ? 'team syncs' : 'teams sync'} on ${apps.length === 1 ? esc(apps[0]) : 'their own'}. No more checking every app.`
+    : 'Paste a team’s calendar link and SIDLNE keeps it in sync. No more checking every app.';
+  return `${heroCard({ eyebrow: 'YOUR APPS', title, extra: `<div class="app-badges">${badges.map(appBadge).join('')}</div>`, text, actions: '<button class="primary" data-action="add-team">＋ Connect a team app</button>', ghost: 'APPS' })}
+    ${appsHTML()}
+    <div class="rail-card"><h2>Where do I find a team’s calendar link?</h2><p><strong>TeamSnap:</strong> Schedule → Export → Subscribe, copy the link.<br><strong>SportsEngine:</strong> Team page → Calendar → Subscribe → copy iCal link.<br><strong>LeagueApps / Sports Connect / Crossbar / GameChanger:</strong> look for “Subscribe”, “Sync calendar” or “iCal”.<br>Links starting with <code>webcal://</code> work too.</p></div>`;
+}
+
 function teamsHTML() {
   const athletes = state.athletes.length
     ? state.athletes.map((a) => `<button class="athlete-chip" data-action="edit-athlete" data-id="${a.id}"><i class="dot" style="background:${esc(a.color)}"></i>${esc(a.name)}</button>`).join('')
@@ -649,9 +678,9 @@ function teamsHTML() {
         <div class="row-actions">${t.calendar_url ? `<button class="outline" data-action="sync-team" data-id="${t.id}">Sync now</button>` : ''}<button class="outline" data-action="edit-team" data-id="${t.id}">Edit</button>${a ? `<button class="link-btn" data-action="filter-athlete" data-id="${a.id}">View lineup</button>` : ''}</div></div>`;
     }).join('')}</div>`
     : '<div class="panel empty"><h3>No teams yet.</h3><p>Add a team to color-code events and import its schedule.</p></div>';
-  return `${appsHTML()}<div class="section"><div class="section-head"><h2>Athletes</h2><button class="outline" data-action="add-athlete">＋ Add athlete</button></div><div class="athlete-chips">${athletes}</div></div>
+  return `<div class="section"><div class="section-head"><h2>Athletes</h2><button class="outline" data-action="add-athlete">＋ Add athlete</button></div><div class="athlete-chips">${athletes}</div></div>
     <div class="section"><div class="section-head"><h2>Teams</h2><button class="outline" data-action="add-team">＋ Add team</button></div>${teams}</div>
-    <div class="rail-card"><h2>Where do I find a team’s calendar link?</h2><p><strong>TeamSnap:</strong> Schedule → Export → Subscribe, copy the link.<br><strong>SportsEngine:</strong> Team page → Calendar → Subscribe → copy iCal link.<br><strong>LeagueApps / Sports Connect / Crossbar / GameChanger:</strong> look for “Subscribe”, “Sync calendar” or “iCal”.<br>Links starting with <code>webcal://</code> work too.</p></div>`;
+    <div class="rail-card"><h2>Team apps</h2><p>See which apps your teams sync from, and connect more.</p><button class="link-btn" data-action="go" data-tab="Apps">Open Apps →</button></div>`;
 }
 
 function athleteForm(a) {
@@ -784,17 +813,19 @@ async function setRsvp(eventId, athleteId, status) {
 // ---------------------------------------------------------------------------
 // Rides
 // ---------------------------------------------------------------------------
-function gameDayStrip() {
-  return `<div class="gameday-strip"><span>🎧 <strong>Driving to a game?</strong> Get the car pumped up.</span>${gameDayButton('', 'primary')}</div>`;
+function gameDayStrip(open = 0, total = 0) {
+  const title = !total ? 'Nothing to drive.<br>Yet.' : open ? `${NUMBER_WORDS[open] ? NUMBER_WORDS[open].replace(/^./, (c) => c.toUpperCase()) : open} ${open === 1 ? 'drive needs' : 'drives need'}<br>a driver.` : 'Every drive.<br>Covered.';
+  const text = open ? 'Claim one below, or split the driving with a carpool.' : '🎧 Driving to a game? Get the car pumped up.';
+  return heroCard({ eyebrow: 'RIDES · NEXT 14 DAYS', title, text, actions: `${gameDayButton('', 'primary')}`, ghost: 'GO' });
 }
 
 function ridesHTML() {
   if (state.carpoolId) return carpoolPageHTML();
   const list = upcoming(14);
   const me = state.session.user.id;
-  if (!list.length) return `${gameDayStrip()}${carpoolListHTML()}<div class="panel empty"><h3>No events in the next two weeks.</h3><p>When events are on the calendar, you can claim drives here.</p></div>`;
+  if (!list.length) return `${gameDayStrip(0, 0)}${carpoolListHTML()}<div class="panel empty"><h3>No events in the next two weeks.</h3><p>When events are on the calendar, you can claim drives here.</p></div>`;
   const open = list.filter((e) => !driveStatus(e).ok).length;
-  return `${gameDayStrip()}${carpoolListHTML()}<div class="section-head"><h2>Family drives</h2></div><div class="list-card"><div class="panel-head" style="padding:16px 0 4px"><h2>Next 14 days</h2><span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} NEED${open === 1 ? 'S' : ''} A DRIVER` : 'ALL COVERED'}</span></div>
+  return `${gameDayStrip(open, list.length)}${carpoolListHTML()}<div class="section-head"><h2>Family drives</h2></div><div class="list-card"><div class="panel-head" style="padding:16px 0 4px"><h2>Next 14 days</h2><span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} NEED${open === 1 ? 'S' : ''} A DRIVER` : 'ALL COVERED'}</span></div>
     ${list.map((e) => {
       const ride = rideFor(e.id), a = athleteOf(e);
       const driver = ride?.driver_profile_id;
@@ -1465,7 +1496,8 @@ function familyHTML() {
   const admin = ['owner', 'admin'].includes(state.role);
   const me = state.session.user.id;
   const others = state.memberships.filter((m) => m.household_id !== state.household.id);
-  return `<div class="main-grid"><div>
+  const crew = state.members.length;
+  return `${heroCard({ eyebrow: `${String(state.household.name || "").toUpperCase()} · ${crew} ${crew === 1 ? 'MEMBER' : 'MEMBERS'}`, title: crew > 1 ? 'Bigger crew.<br>Fewer texts.' : 'Don’t do this<br>alone.', text: crew > 1 ? 'Everyone sees the same schedule, rides and chat.' : 'Invite a co-parent, grandparent or carpool partner below. They see the same schedule, rides and chat.', ghost: 'CREW' })}<div class="main-grid"><div>
     <div class="section"><div class="section-head"><h2>Invite your family</h2></div><div class="list-card" style="padding:20px 22px"><p class="subtitle" style="margin-top:0">Share this code or link with a co-parent, grandparent or carpool partner. Anyone with it can join <strong>${esc(state.household.name)}</strong>.</p>
       <span class="code">${esc(state.household.invite_code)}</span>
       <div class="row-actions"><button class="primary" data-action="share-invite">Share invite link</button><button class="outline" data-action="copy-invite">Copy link</button>${admin ? '<button class="outline" data-action="rotate-code">Reset code</button>' : ''}</div></div></div>
