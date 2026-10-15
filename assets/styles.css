@@ -373,3 +373,8 @@ a.directions,a.directions:visited{color:var(--ink)}
 .siri-list li{background:#f4f6f1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600}
 a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;color:var(--ink);white-space:nowrap}
 @media(max-width:520px){.rail{grid-template-columns:1fr}}
+.sheet-import{border:1px dashed var(--line);border-radius:10px;padding:10px 14px;background:#fafbf8}
+.sheet-import summary{cursor:pointer;font-weight:700;font-size:14px;list-style:none}
+.sheet-import summary::-webkit-details-marker{display:none}
+.sheet-import[open] summary{margin-bottom:8px}
+.sheet-import label{margin-top:10px}
