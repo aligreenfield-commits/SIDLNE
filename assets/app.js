@@ -432,13 +432,12 @@ function overviewHTML() {
   const next = upcoming()[0];
   const week = upcoming(7);
   const teamCount = state.teams.length;
-  const nextRide = next && rideFor(next.id);
   const setupDone = state.athletes.length && state.teams.length && state.events.length && state.members.length > 1;
   const clash = conflicts(week)[0];
   const synced = state.teams.filter((t) => t.calendar_url).length;
 
   const hero = `<div class="grid-top"><div class="next"><span class="eyebrow">UP NEXT</span>${next
-    ? `<h2>${esc(next.title)}</h2><p>◷ ${esc(fmtDate(next.start))} · ${esc(fmtTime(next.start))}${athleteOf(next) ? ' · ' + esc(athleteOf(next).name) : ''}</p>${next.location ? `<p>⌖ ${esc(next.location)}</p>` : ''}<span class="pill ride-chip ${nextRide?.driver_profile_id ? 'ok' : 'warn'}">${nextRide?.driver_profile_id ? `🚗 ${esc(memberName(nextRide.driver_profile_id))} driving` : 'NEEDS A DRIVER'}</span><div class="next-actions">${directionsButton(next.location, 'primary')}${gameDayButton(next.athlete_id, 'outline gameday-hero')}</div>`
+    ? `<h2>${esc(next.title)}</h2><p>◷ ${esc(fmtDate(next.start))} · ${esc(fmtTime(next.start))}${athleteOf(next) ? ' · ' + esc(athleteOf(next).name) : ''}</p>${next.location ? `<p>⌖ ${esc(next.location)}</p>` : ''}<span class="pill ride-chip ${driveStatus(next).ok ? 'ok' : 'warn'}">${esc(driveStatus(next).label)}</span><div class="next-actions">${directionsButton(next.location, 'primary')}${gameDayButton(next.athlete_id, 'outline gameday-hero')}</div>`
     : '<h2>Your next play starts here.</h2><p>Add an event or connect a team calendar to fill your lineup.</p>'}<span class="ghost">S/</span></div>
     <div class="stat"><span class="eyebrow">NEXT 7 DAYS</span><strong>${week.length}</strong><p>${week.length === 1 ? 'event' : 'events'}<br>in the lineup</p><small>${state.athletes.length} ${state.athletes.length === 1 ? 'athlete' : 'athletes'} · ${teamCount} ${teamCount === 1 ? 'team' : 'teams'}</small></div></div>`;
 
@@ -702,9 +701,9 @@ function openEvent(id) {
   const me = state.session.user.id;
   const rideLine = ride?.driver_profile_id
     ? `🚗 ${esc(memberName(ride.driver_profile_id))} ${ride.driver_profile_id === me ? 'are' : 'is'} driving${ride.notes ? ` · ${esc(ride.notes)}` : ''}`
-    : '🚗 No driver yet';
+    : carpoolLine(e) ? '' : '🚗 No driver yet';
   showModal(`<span class="eyebrow">${esc([a?.name, team?.sport].filter(Boolean).join(' · ') || 'EVENT')}</span><h2>${esc(e.title)}</h2>${team ? `<p>${esc(team.name)}</p>` : ''}
-    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}<div>${rideLine}</div>${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}${changeDetail(e.id)}${carpoolLine(e) ? `<div>🚙 ${esc(carpoolLine(e))}</div>` : ''}</div>
+    <div class="info"><div>◷ ${esc(fmtLong(e.start))} · ${esc(fmtTime(e.start))}${e.end ? '–' + esc(fmtTime(e.end)) : ''}</div>${e.location ? `<div>⌖ <a href="${esc(wazeUrl(e.location))}" target="_blank" rel="noopener">${esc(e.location)}</a></div>` : ''}${rideLine ? `<div>${rideLine}</div>` : ''}${e.source === 'ical' ? '<div>↻ Imported from team calendar</div>' : ''}${changeDetail(e.id)}${carpoolLine(e) ? `<div>🚙 ${esc(carpoolLine(e))}</div>` : ''}</div>
     ${rsvpHTML(e)}
     ${e.description ? `<p style="white-space:pre-wrap">${esc(e.description)}</p>` : ''}
     <div class="row-actions">${directionsButton(e.location, 'primary')}${gameDayButton(e.athlete_id)}</div>
@@ -754,13 +753,13 @@ function ridesHTML() {
   const list = upcoming(14);
   const me = state.session.user.id;
   if (!list.length) return `${gameDayStrip()}${carpoolListHTML()}<div class="panel empty"><h3>No events in the next two weeks.</h3><p>When events are on the calendar, you can claim drives here.</p></div>`;
-  const open = list.filter((e) => !rideFor(e.id)?.driver_profile_id).length;
+  const open = list.filter((e) => !driveStatus(e).ok).length;
   return `${gameDayStrip()}${carpoolListHTML()}<div class="section-head"><h2>Family drives</h2></div><div class="list-card"><div class="panel-head" style="padding:16px 0 4px"><h2>Next 14 days</h2><span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} NEED${open === 1 ? 'S' : ''} A DRIVER` : 'ALL COVERED'}</span></div>
     ${list.map((e) => {
       const ride = rideFor(e.id), a = athleteOf(e);
       const driver = ride?.driver_profile_id;
       return `<div class="list-row"><span class="avatar" style="background:${esc(colorOf(e))};color:#fff">${initials(a?.name || e.title)}</span><span class="grow"><strong>${esc(e.title)}</strong><span class="sub">${esc(fmtDate(e.start))} · ${esc(fmtTime(e.start))}${e.location ? ' · ' + esc(e.location) : ''}</span></span>
-        ${driver ? `<span class="pill ok">${esc(memberName(driver).toUpperCase())}${driver === me ? '' : ' DRIVING'}</span>` : '<span class="pill warn">NEEDS DRIVER</span>'}
+        ${driver ? `<span class="pill ok">${esc(memberName(driver).toUpperCase())}${driver === me ? '' : ' DRIVING'}</span>` : (() => { const d = driveStatus(e); return `<span class="pill ${d.ok ? 'ok' : 'warn'}">${esc(d.label.replace(/^NEEDS A DRIVER$/, 'NEEDS DRIVER'))}</span>`; })()}
         ${driver === me ? `<button class="outline" data-action="release-ride" data-id="${e.id}">Release</button>` : `<button class="outline" data-action="claim-ride" data-id="${e.id}">I’ll drive</button>`}${directionsButton(e.location)}</div>`;
     }).join('')}</div>`;
 }
@@ -820,12 +819,31 @@ function carpoolCovers(c, title) {
   return !words.length || words.some((w) => String(title).toLowerCase().includes(w));
 }
 
+// Drop-off and pick-up drivers from this family's carpools covering the event
+function carpoolDrivers(e) {
+  for (const c of state.carpools) {
+    if (c.team_id !== e.team_id || !ownsCarpool(c) || !carpoolCovers(c, e.title)) continue;
+    const to = carpoolDriver(c.id, e.id, 'to'), from = carpoolDriver(c.id, e.id, 'from');
+    if (to || from) return { to, from };
+  }
+  return { to: null, from: null };
+}
+
 function carpoolLine(e) {
-  const c = state.carpools.find((x) => x.team_id === e.team_id && ownsCarpool(x) && carpoolCovers(x, e.title));
-  if (!c) return '';
-  const to = carpoolDriver(c.id, e.id, 'to'), from = carpoolDriver(c.id, e.id, 'from');
+  const { to, from } = carpoolDrivers(e);
   if (!to && !from) return '';
   return [to && `${to.name} drops off`, from && `${from.name} picks up`].filter(Boolean).join(' · ');
+}
+
+// Who's driving, from a family ride or the carpool: { ok, label } for chips and pills
+function driveStatus(e) {
+  const ride = rideFor(e.id);
+  if (ride?.driver_profile_id) return { ok: true, label: `🚗 ${memberName(ride.driver_profile_id)} driving` };
+  const { to, from } = carpoolDrivers(e);
+  if (to && from) return { ok: true, label: to.id === from.id ? `🚙 ${to.name} driving` : `🚙 ${to.name} · ${from.name}` };
+  if (to) return { ok: false, label: `🚙 ${to.name} drops off · NEEDS PICK-UP` };
+  if (from) return { ok: false, label: `🚙 ${from.name} picks up · NEEDS DROP-OFF` };
+  return { ok: false, label: 'NEEDS A DRIVER' };
 }
 
 function carpoolListHTML() {
