@@ -208,7 +208,7 @@ footer{display:flex;justify-content:space-between;border-top:1px solid var(--lin
 .messages{padding:16px}
 .form-grid{grid-template-columns:1fr}
 .install{left:12px;right:12px;bottom:74px;max-width:none}
-.mobile-nav{position:fixed;display:grid;grid-template-columns:repeat(6,1fr);left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);padding:7px 6px max(7px,env(safe-area-inset-bottom))}
+.mobile-nav{position:fixed;display:grid;grid-template-columns:repeat(7,1fr);left:0;right:0;bottom:0;z-index:30;background:#fff;border-top:1px solid var(--line);padding:7px 6px max(7px,env(safe-area-inset-bottom))}
 .mobile-nav button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9px;color:#7c8576}
 .mobile-nav button.active{color:var(--ink);font-weight:800}
 .mobile-nav svg{height:18px;width:18px}
@@ -386,3 +386,14 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .one-place h2{font-size:21px;letter-spacing:-.4px}
 .app-badges{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
 .app-badges .app-logo{height:36px;width:36px;font-size:10px}
+/* Bold black hero cards: lime eyebrow, big tight headline */
+.hero-card{background:var(--ink);color:#fff;border-radius:16px;padding:26px 26px 24px;position:relative;overflow:hidden;margin-bottom:22px}
+.hero-card .eyebrow{color:var(--lime);position:relative;z-index:1}
+.hero-card h2{font-size:38px;line-height:1.02;font-weight:850;letter-spacing:-1.8px;margin:16px 0 12px;position:relative;z-index:1}
+.hero-card p{color:#cfd6ca;font-size:14px;line-height:1.45;margin:0;max-width:440px;position:relative;z-index:1}
+.hero-card .row-actions{margin-top:18px;position:relative;z-index:1}
+.hero-card .app-badges{position:relative;z-index:1}
+.hero-card .app-badges .app-logo{background:var(--lime);color:var(--ink);border-color:var(--lime)}
+.hero-card .ghost{position:absolute;right:-8px;bottom:-60px;font-weight:950;font-style:italic;font-size:190px;letter-spacing:-14px;color:#ffffff07;pointer-events:none}
+.hero-card .primary{color:var(--ink)}
+@media(max-width:700px){.hero-card{padding:22px 20px}.hero-card h2{font-size:33px;letter-spacing:-1.5px}.hero-card .ghost{font-size:140px}.mobile-nav button{font-size:8.5px}}
