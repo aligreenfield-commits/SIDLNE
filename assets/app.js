@@ -814,8 +814,14 @@ function carpoolDriver(cid, eventId, leg) {
 function ownsCarpool(c) { return c.household_id === state.household?.id; }
 
 // "Dana drops off · Lee picks up" for an event in one of your family's carpools
+// A carpool can cover only events whose title contains one of its comma-separated words
+function carpoolCovers(c, title) {
+  const words = String(c.event_filter || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+  return !words.length || words.some((w) => String(title).toLowerCase().includes(w));
+}
+
 function carpoolLine(e) {
-  const c = state.carpools.find((x) => x.team_id === e.team_id && ownsCarpool(x));
+  const c = state.carpools.find((x) => x.team_id === e.team_id && ownsCarpool(x) && carpoolCovers(x, e.title));
   if (!c) return '';
   const to = carpoolDriver(c.id, e.id, 'to'), from = carpoolDriver(c.id, e.id, 'from');
   if (!to && !from) return '';
@@ -877,8 +883,8 @@ function carpoolPageHTML() {
       }).join('')}</div>`).join('')
     : `<div class="empty"><h3>No events in the next ${CARPOOL_DAYS} days.</h3><p>Events from the team’s calendar show up here automatically.</p></div>`;
   return `<button class="link-btn" data-action="close-carpool">← All rides</button>
-    <div class="carpool-head"><div><span class="eyebrow">CARPOOL</span><h2>🚙 ${esc(c.name)}</h2><p class="subtitle">Next ${CARPOOL_DAYS} days · <span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} ${open === 1 ? 'DRIVE' : 'DRIVES'} OPEN` : 'ALL COVERED'}</span></p></div>
-      <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-import" data-id="${c.id}">📄 Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button></div></div>
+    <div class="carpool-head"><div><span class="eyebrow">CARPOOL</span><h2>🚙 ${esc(c.name)}</h2><p class="subtitle">Next ${CARPOOL_DAYS} days${c.event_filter ? ` · only “${esc(c.event_filter)}” events` : ''} · <span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} ${open === 1 ? 'DRIVE' : 'DRIVES'} OPEN` : 'ALL COVERED'}</span></p></div>
+      <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-import" data-id="${c.id}">📄 Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button>${ownsCarpool(c) ? `<button class="outline" data-action="edit-carpool" data-id="${c.id}">✏️ Edit carpool</button>` : ''}</div></div>
     <div class="section"><div class="section-head"><h2>Drivers</h2><div class="head-actions">${me ? `<button class="link-btn" data-action="carpool-me" data-id="${c.id}">Edit my info</button>` : `<button class="outline" data-action="carpool-me" data-id="${c.id}">＋ Add me as a driver</button>`}${ownsCarpool(c) ? `<button class="link-btn" data-action="carpool-add-parent" data-id="${c.id}">＋ Add a parent</button>` : ''}</div></div>
       <div class="athlete-chips">${members.length ? members.map((m) => `<span class="athlete-chip">${esc(m.name)}${m.seats != null ? ` · ${m.seats} ${m.seats === 1 ? 'seat' : 'seats'}` : ''}${m.phone ? ` · <a href="tel:${esc(m.phone.replace(/[^\d+]/g, ''))}">${esc(m.phone)}</a>` : ''}${m.profile_id ? '' : ' <small class="sub">(not joined)</small>'}</span>`).join('') : '<p class="subtitle">No drivers yet. Invite the other parents.</p>'}</div></div>
     <div class="panel carpool-grid">${rows}</div>
@@ -888,11 +894,20 @@ function carpoolPageHTML() {
 function carpoolForm() {
   showModal(`<span class="eyebrow">NEW CARPOOL</span><h2>Start a carpool</h2><p>Other parents join with an invite link and see this team’s schedule. Everyone can sign up to drive.</p>
     <form class="form" data-form="carpool"><label>Team<select name="team_id" required>${state.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>
-    <label>Carpool name (optional)<input name="name" maxlength="80" placeholder="e.g. Hawks U12 carpool"></label>
+    <label>Carpool name (optional)<input name="name" maxlength="80" placeholder="e.g. Field hockey carpool"></label>
+    <label>Which events? (optional)<input name="event_filter" maxlength="120" placeholder="e.g. WYFH, field hockey"><small class="hint">Leave blank for all of the team’s events, or list words from event names (separated by commas) to include only those, e.g. just field hockey when a club calendar mixes sports.</small></label>
     <details class="sheet-import"><summary>📄 Already have a carpool Google Sheet? Import it</summary>
       <p class="hint">Use a sheet with a <b>Date</b> column and <b>Drop-off</b> / <b>Pick-up</b> (or one <b>Driver</b>) columns. Drivers are matched by name, and new names are added.</p>
       ${SHEET_FIELDS}</details>
     <button class="primary full" type="submit">Create carpool</button></form>`);
+}
+
+function carpoolEditForm(cid) {
+  const c = state.carpools.find((x) => x.id === cid);
+  showModal(`<span class="eyebrow">CARPOOL</span><h2>Edit carpool</h2>
+    <form class="form" data-form="carpool-edit" data-id="${cid}"><label>Carpool name<input name="name" required maxlength="80" value="${esc(c.name)}"></label>
+    <label>Which events?<input name="event_filter" maxlength="120" value="${esc(c.event_filter || '')}" placeholder="e.g. WYFH, field hockey"><small class="hint">Only events whose name contains one of these words (separated by commas). Leave blank for all of ${esc(byId(state.teams, c.team_id)?.name || 'the team')}’s events.</small></label>
+    <button class="primary full" type="submit">Save</button></form>`);
 }
 
 function carpoolMeForm(cid) {
@@ -1477,6 +1492,7 @@ const actions = {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     toast('Downloaded. Open it with Google Sheets: File → Import.');
   },
+  'edit-carpool': (el) => carpoolEditForm(el.dataset.id),
   'delete-carpool': async (el) => {
     if (!confirm('Delete this carpool for everyone?')) return;
     await busy(null, async () => { must(await supabase.from('carpools').delete().eq('id', el.dataset.id)); await loadCarpools(); closeCarpool(); toast('Carpool deleted'); });
@@ -1558,7 +1574,7 @@ const forms = {
   },
   carpool: async (f) => {
     const team = byId(state.teams, f.get('team_id'));
-    const c = must(await supabase.from('carpools').insert({ household_id: state.household.id, team_id: team.id, name: f.get('name').trim() || `${team.name} carpool`, created_by: state.session.user.id }).select().single());
+    const c = must(await supabase.from('carpools').insert({ household_id: state.household.id, team_id: team.id, name: f.get('name').trim() || `${team.name} carpool`, event_filter: (f.get('event_filter') || '').trim() || null, created_by: state.session.user.id }).select().single());
     must(await supabase.from('carpool_members').insert({ carpool_id: c.id, profile_id: state.session.user.id, name: state.profile?.display_name || state.session.user.email.split('@')[0] }));
     await loadCarpools();
     closeModal();
@@ -1571,6 +1587,14 @@ const forms = {
       renderMain();
       toast(`Carpool created. ${importToast(r)}`);
     } else toast('Carpool created. Invite the other parents!');
+  },
+  'carpool-edit': async (f, form) => {
+    const cid = form.dataset.id;
+    must(await supabase.from('carpools').update({ name: f.get('name').trim(), event_filter: f.get('event_filter').trim() || null }).eq('id', cid));
+    await loadCarpools();
+    closeModal();
+    await openCarpool(cid);
+    toast('Carpool updated');
   },
   'carpool-me': async (f, form) => {
     const cid = form.dataset.id;
