@@ -205,9 +205,18 @@ review = { demoAccountRequired: true, demoAccountName: ENV["REVIEW_EMAIL"], demo
            notes: LISTING["reviewNotes"], contactEmail: ENV["CONTACT_EMAIL"].to_s.strip }
 review[:contactFirstName] = first if first
 review[:contactLastName] = last if last
-review[:contactPhone] = ENV["CONTACT_PHONE"].strip unless ENV["CONTACT_PHONE"].to_s.strip.empty?
+unless ENV["CONTACT_PHONE"].to_s.strip.empty?
+  phone = ENV["CONTACT_PHONE"].strip.gsub(/[^\d+ ]/, " ").squeeze(" ").strip
+  phone = "+1 #{phone}" if !phone.start_with?("+") && phone.delete(" ").length == 10 # US number without country code
+  review[:contactPhone] = phone
+end
 review.delete(:demoAccountPassword) if review[:demoAccountPassword].to_s.empty?
 detail = api(:get, "/v1/appStoreVersions/#{version_id}/appStoreReviewDetail", ok_missing: true)&.dig("data")
+if !detail && (review[:contactFirstName].to_s.empty? || review[:contactLastName].to_s.empty? || review[:contactPhone].to_s.empty?)
+  abort "::error::Everything else is filled in. Apple needs a contact for the review: add the APP_REVIEW_CONTACT_NAME " \
+        "(first and last name) and APP_REVIEW_PHONE (starting with + and the country code, e.g. +1 555 123 4567) secrets " \
+        "in Settings > Environments > NEW KEYS, then run this again."
+end
 if detail
   api(:patch, "/v1/appStoreReviewDetails/#{detail["id"]}", { data: { type: "appStoreReviewDetails", id: detail["id"], attributes: review } })
 else
