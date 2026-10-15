@@ -68,8 +68,9 @@ jobs:
           AUTH=(-H "apikey: $SERVICE" -H "Content-Type: application/json")
           [[ "$SERVICE" == eyJ* ]] && AUTH+=(-H "Authorization: Bearer $SERVICE")
 
-          # A fresh password every run; it only goes to Apple
-          PASSWORD="Sidlne-$(openssl rand -hex 8)"
+          # The same password every run (derived from a secret), so a re-run never
+          # locks out a reviewer who already has it; it only goes to Apple
+          PASSWORD="Sidlne-$(printf '%s' "$token" | openssl dgst -sha256 -hmac "sidlne-app-review" -r | cut -c1-16)"
           echo "::add-mask::$PASSWORD"
 
           body="$(jq -n --arg e "$REVIEW_EMAIL" --arg p "$PASSWORD" '{email: $e, password: $p, email_confirm: true, user_metadata: {display_name: "Sam Rivera"}}')"
