@@ -24,6 +24,10 @@ on:
         description: "Submit for App Review (otherwise only fill in the listing)"
         type: boolean
         default: true
+      withdraw:
+        description: "If a version is waiting for review, pull it back first so locked details (like the name) can change, then resubmit"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,6 +52,7 @@ jobs:
       CONTACT_EMAIL: ${{ secrets.APP_REVIEW_EMAIL || 'support@sidlne.app' }}
       REVIEW_EMAIL: appreview@sidlne.app
       SUBMIT: ${{ inputs.submit }}
+      WITHDRAW: ${{ inputs.withdraw }}
     steps:
       - uses: actions/checkout@v4
 

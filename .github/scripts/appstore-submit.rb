@@ -79,7 +79,23 @@ step "App: #{app.dig("attributes", "name")} (#{app_id})"
 
 versions = api(:get, "/v1/apps/#{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")["data"]
 state = ->(v) { v.dig("attributes", "appVersionState") || v.dig("attributes", "appStoreState") }
-if (busy = versions.find { |v| %w[WAITING_FOR_REVIEW IN_REVIEW].include?(state[v]) })
+busy = versions.find { |v| %w[WAITING_FOR_REVIEW IN_REVIEW].include?(state[v]) }
+if busy && ENV["WITHDRAW"] == "true"
+  # Pull the version back from review so the locked details (like the name) can change
+  subs = api(:get, "/v1/reviewSubmissions?filter[app]=#{app_id}&filter[platform]=IOS&filter[state]=WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES&limit=5")["data"]
+  subs.each do |sub|
+    api(:patch, "/v1/reviewSubmissions/#{sub["id"]}", { data: { type: "reviewSubmissions", id: sub["id"], attributes: { canceled: true } } })
+  end
+  step "Withdrew version #{busy.dig("attributes", "versionString")} from App Review"
+  40.times do
+    sleep 5
+    versions = api(:get, "/v1/apps/#{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")["data"]
+    break if versions.any? { |v| v["id"] == busy["id"] && EDITABLE.include?(state[v]) }
+  end
+  busy = versions.find { |v| %w[WAITING_FOR_REVIEW IN_REVIEW].include?(state[v]) }
+  abort "::error::Apple hasn't released the version for editing yet. Run again in a few minutes." if busy
+end
+if busy
   # Keep the reviewer's sign-in current; everything else is locked during review
   if (detail = api(:get, "/v1/appStoreVersions/#{busy["id"]}/appStoreReviewDetail", ok_missing: true)&.dig("data")) && !ENV["REVIEW_PASSWORD"].to_s.empty?
     begin
@@ -139,6 +155,15 @@ info_locs.each do |il|
   attrs = { privacyPolicyUrl: LISTING["privacyPolicyUrl"] }
   attrs[:subtitle] = LISTING["subtitle"] if il.dig("attributes", "locale") == locale
   api(:patch, "/v1/appInfoLocalizations/#{il["id"]}", { data: { type: "appInfoLocalizations", id: il["id"], attributes: attrs } })
+  # The App Store name; Apple refuses names another app already uses, so don't let that block the rest
+  if il.dig("attributes", "locale") == locale && LISTING["name"] && il.dig("attributes", "name") != LISTING["name"]
+    begin
+      api(:patch, "/v1/appInfoLocalizations/#{il["id"]}", { data: { type: "appInfoLocalizations", id: il["id"], attributes: { name: LISTING["name"] } } })
+      step "App Store name set to #{LISTING["name"]}"
+    rescue ApiError => e
+      puts "::warning::Apple didn't accept the name \"#{LISTING["name"]}\" (keeping \"#{il.dig("attributes", "name")}\"): #{e.message}"
+    end
+  end
   # Apple can also ask for the policy as text; a short summary pointing at the full policy
   begin
     api(:patch, "/v1/appInfoLocalizations/#{il["id"]}", { data: { type: "appInfoLocalizations", id: il["id"],
