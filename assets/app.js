@@ -428,6 +428,17 @@ function conflicts(list) {
   return out;
 }
 
+// "One place beats five.": the family's connected team apps as badges
+function onePlaceCard(synced, teamCount) {
+  const apps = [...new Set(state.teams.filter((t) => t.calendar_url).map((t) => calendarSource(t.calendar_url) || 'Team calendar'))];
+  const badges = apps.length ? apps : ['TeamSnap', 'SportsEngine', 'LeagueApps', 'GameChanger', 'Sports Connect', 'Crossbar'];
+  const badge = (n) => `<span class="app-logo" title="${esc(n)}">${esc(APP_ABBR[n] || n.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase())}</span>`;
+  const text = synced
+    ? `${synced} of ${teamCount} ${teamCount === 1 ? 'team syncs' : 'teams sync'} automatically from ${apps.length === 1 ? esc(apps[0]) : `${apps.length} apps`}.`
+    : 'Paste a team’s calendar link from TeamSnap, SportsEngine, LeagueApps and more, and SIDLNE keeps it in sync.';
+  return `<div class="rail-card one-place"><h2>One place beats ${apps.length > 1 ? (['', '', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][apps.length] || apps.length) : 'five'}.</h2><div class="app-badges">${badges.map(badge).join('')}</div><p>${text}</p><button class="link-btn" data-action="go" data-tab="Teams">${apps.length ? 'See your apps →' : 'Connect a team app →'}</button></div>`;
+}
+
 function overviewHTML() {
   const next = upcoming()[0];
   const week = upcoming(7);
@@ -445,7 +456,7 @@ function overviewHTML() {
     ? `<div class="rail-card"><h2>Heads up</h2>${clash
       ? `<span class="chip">SCHEDULE OVERLAP</span><h3>Two places.<br>One you.</h3><p>${esc(athleteOf(clash[0])?.name || clash[0].title)} and ${esc(athleteOf(clash[1])?.name || clash[1].title)} overlap on ${esc(fmtDate(clash[0].start))}. Line up a driver.</p><button class="outline" data-action="go" data-tab="Rides">Plan the rides</button>`
       : `<span class="chip" style="background:#e4f2d2;color:#3f6a1c">ALL CLEAR</span><h3>No overlaps<br>this week.</h3><p>Nobody needs to be in two places at once.</p>`}</div>
-      <div class="rail-card"><h2>Team calendars</h2><p>${synced ? `${synced} of ${teamCount} ${teamCount === 1 ? 'team syncs' : 'teams sync'} automatically from their league app.` : 'Paste a team’s calendar link from TeamSnap, SportsEngine, LeagueApps and more to import its schedule.'}</p><button class="link-btn" data-action="go" data-tab="Teams">Manage teams →</button></div>`
+      ${onePlaceCard(synced, teamCount)}`
     : `<div class="rail-card"><h2>Get set up</h2><ul class="checklist">
       ${checkItem(state.athletes.length, 'Add your athletes', 'add-athlete')}
       ${checkItem(state.teams.length, 'Add a team', 'add-team')}
