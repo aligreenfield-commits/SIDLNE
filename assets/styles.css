@@ -378,3 +378,8 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .sheet-import summary::-webkit-details-marker{display:none}
 .sheet-import[open] summary{margin-bottom:8px}
 .sheet-import label{margin-top:10px}
+.status.bad{color:#b4472f}
+.status.muted{color:var(--muted)}
+.works-with{font-size:12px;color:var(--muted);margin:14px 0 0;line-height:1.5}
+.apps .row-actions{margin-top:14px}
+@media(max-width:700px){.apps{padding:18px 16px}.app-row small{white-space:normal}}
