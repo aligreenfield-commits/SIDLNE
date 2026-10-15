@@ -80,7 +80,17 @@ step "App: #{app.dig("attributes", "name")} (#{app_id})"
 versions = api(:get, "/v1/apps/#{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")["data"]
 state = ->(v) { v.dig("attributes", "appVersionState") || v.dig("attributes", "appStoreState") }
 if (busy = versions.find { |v| %w[WAITING_FOR_REVIEW IN_REVIEW].include?(state[v]) })
-  puts "::notice::Version #{busy.dig("attributes", "versionString")} is already #{state[busy].tr("_", " ").downcase}. Nothing to do."
+  # Keep the reviewer's sign-in current; everything else is locked during review
+  if (detail = api(:get, "/v1/appStoreVersions/#{busy["id"]}/appStoreReviewDetail", ok_missing: true)&.dig("data")) && !ENV["REVIEW_PASSWORD"].to_s.empty?
+    begin
+      api(:patch, "/v1/appStoreReviewDetails/#{detail["id"]}", { data: { type: "appStoreReviewDetails", id: detail["id"],
+        attributes: { demoAccountName: ENV["REVIEW_EMAIL"], demoAccountPassword: ENV["REVIEW_PASSWORD"] } } })
+      step "Demo account sign-in updated for App Review"
+    rescue ApiError => e
+      puts "::warning::Couldn't update the demo account for the review in progress: #{e.message}"
+    end
+  end
+  puts "::notice::Version #{busy.dig("attributes", "versionString")} is #{state[busy].tr("_", " ").downcase}. Nothing else to do."
   exit 0
 end
 version = versions.find { |v| EDITABLE.include?(state[v]) }
