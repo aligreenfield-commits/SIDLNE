@@ -246,6 +246,49 @@ else
   step "Uploaded #{SHOTS.size} screenshots"
 end
 
+# --- App preview video (optional, appstore/preview/*.mp4) -----------------------------
+PREVIEWS = Dir[File.join(ROOT, "appstore/preview/*.mp4")].sort
+unless PREVIEWS.empty?
+  psets = api(:get, "/v1/appStoreVersionLocalizations/#{loc["id"]}/appPreviewSets?limit=50")["data"]
+  pset = psets.find { |s| s.dig("attributes", "previewType") == "IPHONE_67" } ||
+         api(:post, "/v1/appPreviewSets", { data: { type: "appPreviewSets", attributes: { previewType: "IPHONE_67" },
+           relationships: { appStoreVersionLocalization: rel("appStoreVersionLocalizations", loc["id"]) } } })["data"]
+  existing = api(:get, "/v1/appPreviewSets/#{pset["id"]}/appPreviews?limit=10")["data"]
+  wanted = PREVIEWS.map { |f| [File.basename(f), Digest::MD5.file(f).hexdigest] }
+  have = existing.map { |p| [p.dig("attributes", "fileName"), p.dig("attributes", "sourceFileChecksum")] }
+  if have == wanted
+    step "App preview video up to date"
+  else
+    existing.each { |p| api(:delete, "/v1/appPreviews/#{p["id"]}") }
+    PREVIEWS.each do |file|
+      bytes = File.binread(file)
+      pv = api(:post, "/v1/appPreviews", { data: { type: "appPreviews",
+        attributes: { fileName: File.basename(file), fileSize: bytes.bytesize, mimeType: "video/mp4", previewFrameTimeCode: "00:00:01:00" },
+        relationships: { appPreviewSet: rel("appPreviewSets", pset["id"]) } } })["data"]
+      pv.dig("attributes", "uploadOperations").each do |op|
+        uri = URI(op["url"])
+        req = Net::HTTP.const_get(op["method"].capitalize).new(uri)
+        (op["requestHeaders"] || []).each { |h| req[h["name"]] = h["value"] }
+        req.body = bytes.byteslice(op["offset"], op["length"])
+        res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") { |h| h.request(req) }
+        raise "Uploading #{File.basename(file)} failed (HTTP #{res.code})" unless res.code.start_with?("2")
+      end
+      api(:patch, "/v1/appPreviews/#{pv["id"]}", { data: { type: "appPreviews", id: pv["id"],
+        attributes: { uploaded: true, sourceFileChecksum: Digest::MD5.hexdigest(bytes) } } })
+    end
+    # Apple transcodes videos; wait (up to ~10 minutes) so the submission doesn't race it
+    120.times do
+      states = api(:get, "/v1/appPreviewSets/#{pset["id"]}/appPreviews?limit=10")["data"].map do |p|
+        p.dig("attributes", "videoDeliveryState", "state") || p.dig("attributes", "assetDeliveryState", "state")
+      end
+      abort "::error::Apple couldn't process the app preview video (it must be 886 x 1920, 15-30 s, H.264, 30 fps)." if states.include?("FAILED")
+      break if states.all?("COMPLETE")
+      sleep 5
+    end
+    step "Uploaded the app preview video"
+  end
+end
+
 # --- Build ---------------------------------------------------------------------------
 builds = api(:get, "/v1/builds?filter[app]=#{app_id}&filter[preReleaseVersion.version]=#{version.dig("attributes", "versionString")}" \
                    "&filter[processingState]=VALID&filter[expired]=false&sort=-uploadedDate&limit=1")["data"]
