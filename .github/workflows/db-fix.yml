@@ -1,0 +1,38 @@
+# Runs a one-off data fix from infra/supabase/fixes/ against the live database
+# (Actions > Run data fix > Run workflow, then pick the file).
+
+name: Run data fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: "File name in infra/supabase/fixes/"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'reufyrhowxxivpmobouz' }}
+      FIX_FILE: ${{ inputs.file }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply the fix
+        run: |
+          set -euo pipefail
+          [[ "$FIX_FILE" =~ ^[A-Za-z0-9._-]+\.sql$ ]] || { echo "::error::Give a .sql file name from infra/supabase/fixes/"; exit 1; }
+          f="infra/supabase/fixes/$FIX_FILE"
+          [ -f "$f" ] || { echo "::error::$f not found"; exit 1; }
+          token="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          jq -n --rawfile q "$f" '{query: $q}' > body.json
+          status=$(curl -sS -o response.json -w '%{http_code}' -X POST \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" --data @body.json)
+          echo "HTTP $status"
+          cat response.json; echo
+          [ "$status" -lt 300 ] || { echo "::error::The fix failed (HTTP $status); nothing was changed if it raised an error."; exit 1; }
