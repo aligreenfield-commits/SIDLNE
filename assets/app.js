@@ -878,7 +878,7 @@ function carpoolPageHTML() {
     : `<div class="empty"><h3>No events in the next ${CARPOOL_DAYS} days.</h3><p>Events from the team’s calendar show up here automatically.</p></div>`;
   return `<button class="link-btn" data-action="close-carpool">← All rides</button>
     <div class="carpool-head"><div><span class="eyebrow">CARPOOL</span><h2>🚙 ${esc(c.name)}</h2><p class="subtitle">Next ${CARPOOL_DAYS} days · <span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} ${open === 1 ? 'DRIVE' : 'DRIVES'} OPEN` : 'ALL COVERED'}</span></p></div>
-      <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-import" data-id="${c.id}">Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button></div></div>
+      <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-import" data-id="${c.id}">📄 Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button></div></div>
     <div class="section"><div class="section-head"><h2>Drivers</h2><div class="head-actions">${me ? `<button class="link-btn" data-action="carpool-me" data-id="${c.id}">Edit my info</button>` : `<button class="outline" data-action="carpool-me" data-id="${c.id}">＋ Add me as a driver</button>`}${ownsCarpool(c) ? `<button class="link-btn" data-action="carpool-add-parent" data-id="${c.id}">＋ Add a parent</button>` : ''}</div></div>
       <div class="athlete-chips">${members.length ? members.map((m) => `<span class="athlete-chip">${esc(m.name)}${m.seats != null ? ` · ${m.seats} ${m.seats === 1 ? 'seat' : 'seats'}` : ''}${m.phone ? ` · <a href="tel:${esc(m.phone.replace(/[^\d+]/g, ''))}">${esc(m.phone)}</a>` : ''}${m.profile_id ? '' : ' <small class="sub">(not joined)</small>'}</span>`).join('') : '<p class="subtitle">No drivers yet. Invite the other parents.</p>'}</div></div>
     <div class="panel carpool-grid">${rows}</div>
@@ -889,6 +889,9 @@ function carpoolForm() {
   showModal(`<span class="eyebrow">NEW CARPOOL</span><h2>Start a carpool</h2><p>Other parents join with an invite link and see this team’s schedule. Everyone can sign up to drive.</p>
     <form class="form" data-form="carpool"><label>Team<select name="team_id" required>${state.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>
     <label>Carpool name (optional)<input name="name" maxlength="80" placeholder="e.g. Hawks U12 carpool"></label>
+    <details class="sheet-import"><summary>📄 Already have a carpool Google Sheet? Import it</summary>
+      <p class="hint">Use a sheet with a <b>Date</b> column and <b>Drop-off</b> / <b>Pick-up</b> (or one <b>Driver</b>) columns. Drivers are matched by name, and new names are added.</p>
+      ${SHEET_FIELDS}</details>
     <button class="primary full" type="submit">Create carpool</button></form>`);
 }
 
@@ -914,12 +917,33 @@ function carpoolJoinForm(code = '') {
     <button class="primary full" type="submit">Join carpool</button></form>`);
 }
 
+const SHEET_FIELDS = `<label>Google Sheets link<input name="url" type="url" inputmode="url" placeholder="https://docs.google.com/spreadsheets/d/…"><small class="hint">In Google Sheets tap Share → General access → “Anyone with the link”, then Copy link.</small></label>
+      <label>…or upload a file (.csv)<input name="file" type="file" accept=".csv,.tsv,.txt,text/csv"><small class="hint">Google Sheets: File → Download → Comma-separated values (.csv).</small></label>`;
+
+// The sheet text from an uploaded file or a Google Sheets link (read by our server: Google blocks browsers)
+async function readSheetInput(f) {
+  const file = f.get('file');
+  if (file && file.size) return file.text();
+  const url = (f.get('url') || '').trim();
+  if (!url) return '';
+  const { data, error } = await supabase.functions.invoke('sync-calendar', { body: { sheet_url: url } });
+  if (error) {
+    let msg = error.message;
+    try { msg = (await error.context.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  return data.csv;
+}
+
+function importToast(r) {
+  return `Imported ${r.rides} ${r.rides === 1 ? 'drive' : 'drives'}${r.added.length ? `, added ${r.added.join(', ')}` : ''}${r.skipped ? ` · ${r.skipped} rows didn’t match an event` : ''}`;
+}
+
 function carpoolImportForm(cid) {
   showModal(`<span class="eyebrow">IMPORT</span><h2>Import from Google Sheets</h2>
     <p>Use a sheet with a <b>Date</b> column and driver columns such as <b>Drop-off</b> and <b>Pick-up</b> (or one <b>Driver</b> column). Names are matched to drivers, and new names are added.</p>
     <form class="form" data-form="carpool-import" data-id="${cid}">
-      <label>Spreadsheet file (.csv)<input name="file" type="file" accept=".csv,.tsv,.txt,text/csv"><small class="hint">In Google Sheets: File → Download → Comma-separated values (.csv).</small></label>
-      <label>…or a Google Sheets link<input name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…"><small class="hint">The sheet must be shared as “Anyone with the link can view”.</small></label>
+      ${SHEET_FIELDS}
       <button class="primary full" type="submit">Import</button></form>`);
 }
 
@@ -1045,14 +1069,6 @@ async function importCarpoolSheet(cid, text) {
   if (unique.length) must(await supabase.from('carpool_rides').upsert(unique, { onConflict: 'carpool_id,event_id,leg' }));
   await loadCarpools();
   return { rides: unique.length, added, skipped };
-}
-
-function googleSheetCsvUrl(url) {
-  const m = /docs\.google\.com\/spreadsheets\/d\/([^/]+)/.exec(url);
-  if (!m) return url;
-  if (m[1] === 'e') return url.replace(/\/pubhtml.*$|\/pub\?.*$/, '/pub?output=csv');
-  const gid = /[#&?]gid=(\d+)/.exec(url)?.[1];
-  return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv${gid ? `&gid=${gid}` : ''}`;
 }
 
 function carpoolCsv(cid) {
@@ -1547,7 +1563,14 @@ const forms = {
     await loadCarpools();
     closeModal();
     await openCarpool(c.id);
-    toast('Carpool created. Invite the other parents!');
+    // Optional Google Sheet: the carpool exists either way, so a sheet problem doesn't lose it
+    let sheet = '';
+    try { sheet = await readSheetInput(f); } catch (err) { toast(`Carpool created, but the sheet couldn’t be read: ${err.message}`); return; }
+    if (sheet) {
+      const r = await importCarpoolSheet(c.id, sheet);
+      renderMain();
+      toast(`Carpool created. ${importToast(r)}`);
+    } else toast('Carpool created. Invite the other parents!');
   },
   'carpool-me': async (f, form) => {
     const cid = form.dataset.id;
@@ -1574,22 +1597,12 @@ const forms = {
     toast(`You joined ${c.name}`);
   },
   'carpool-import': async (f, form) => {
-    const cid = form.dataset.id;
-    const file = f.get('file');
-    let text = '';
-    if (file && file.size) text = await file.text();
-    else if (f.get('url').trim()) {
-      try {
-        const res = await fetch(googleSheetCsvUrl(f.get('url').trim()));
-        if (!res.ok) throw new Error();
-        text = await res.text();
-        if (/^\s*</.test(text)) throw new Error();
-      } catch { throw new Error('Couldn’t read that link. In Google Sheets choose File → Download → Comma-separated values (.csv), then upload the file here.'); }
-    } else throw new Error('Choose a file or paste a link.');
-    const r = await importCarpoolSheet(cid, text);
+    const text = await readSheetInput(f);
+    if (!text) throw new Error('Paste a Google Sheets link or choose a file.');
+    const r = await importCarpoolSheet(form.dataset.id, text);
     closeModal();
     renderMain();
-    toast(`Imported ${r.rides} ${r.rides === 1 ? 'drive' : 'drives'}${r.added.length ? `, added ${r.added.join(', ')}` : ''}${r.skipped ? ` · ${r.skipped} rows didn’t match an event` : ''}`);
+    toast(importToast(r));
   },
   signin: async (f) => {
     must(await supabase.auth.signInWithPassword({ email: f.get('email').trim(), password: f.get('password') }));

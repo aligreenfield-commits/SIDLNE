@@ -8,12 +8,16 @@
 //
 // Scheduled (pg_cron, every 15 minutes, see migration 006): checks every team.
 //   POST with header x-sync-key  ->  { "checked": n, "changed": n, "failed": n }
+//
+// Carpool import: reads a shared Google Sheet as CSV for a signed-in user.
+//   POST { "sheet_url": "https://docs.google.com/spreadsheets/d/…" }  ->  { "csv": "…" }
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { type IcsEvent, parseIcs } from "./ics.ts";
 import { detectChanges, type SavedEvent } from "./changes.ts";
 import { changeMessage, type ChangeRow } from "./notify.ts";
 import { apnsConfigured, sendPush } from "./apns.ts";
+import { fetchSheetCsv } from "./sheets.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +58,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  let body: { team_id?: string } = {};
+  let body: { team_id?: string; sheet_url?: string } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
@@ -78,6 +82,11 @@ Deno.serve(async (req) => {
 
   const { data: auth } = await supabase.auth.getUser(authorization.replace(/^Bearer\s+/i, ""));
   if (!auth?.user) return json({ error: "Not signed in" }, 401);
+
+  if (body.sheet_url) {
+    const sheet = await fetchSheetCsv(body.sheet_url);
+    return "csv" in sheet ? json(sheet) : json({ error: sheet.error }, sheet.status);
+  }
 
   const teamId = body.team_id;
   if (!teamId) return json({ error: "team_id is required" }, 400);
