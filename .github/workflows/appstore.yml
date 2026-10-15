@@ -24,6 +24,10 @@ on:
         description: "Submit for App Review (otherwise only fill in the listing)"
         type: boolean
         default: true
+      status_only:
+        description: "Only check where the app stands in App Review (changes nothing)"
+        type: boolean
+        default: false
       withdraw:
         description: "If a version is waiting for review, pull it back first so locked details (like the name) can change, then resubmit"
         type: boolean
@@ -53,10 +57,12 @@ jobs:
       REVIEW_EMAIL: appreview@sidlne.app
       SUBMIT: ${{ inputs.submit }}
       WITHDRAW: ${{ inputs.withdraw }}
+      STATUS_ONLY: ${{ inputs.status_only }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Demo account for App Review
+        if: ${{ !inputs.status_only }}
         run: |
           set -euo pipefail
           token="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"

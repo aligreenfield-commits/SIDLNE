@@ -79,6 +79,13 @@ step "App: #{app.dig("attributes", "name")} (#{app_id})"
 
 versions = api(:get, "/v1/apps/#{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")["data"]
 state = ->(v) { v.dig("attributes", "appVersionState") || v.dig("attributes", "appStoreState") }
+if ENV["STATUS_ONLY"] == "true"
+  # Read-only: report where each version stands and change nothing
+  versions.each { |v| puts "::notice::Version #{v.dig("attributes", "versionString")}: #{state[v].tr("_", " ").downcase}" }
+  live = versions.find { |v| %w[READY_FOR_SALE READY_FOR_DISTRIBUTION].include?(state[v]) }
+  puts "::notice::LIVE on the App Store: https://apps.apple.com/app/id#{app_id}" if live
+  exit 0
+end
 busy = versions.find { |v| %w[WAITING_FOR_REVIEW IN_REVIEW].include?(state[v]) }
 if busy && ENV["WITHDRAW"] == "true"
   # Pull the version back from review so the locked details (like the name) can change
