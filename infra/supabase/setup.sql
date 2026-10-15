@@ -1,6 +1,6 @@
 -- setup.sql: the complete SIDLNE database setup in one file.
 -- Paste into Supabase > SQL Editor and click Run. Safe to run again.
--- Generated from migrations/ (001-007); edit those, then regenerate with:
+-- Generated from migrations/ (001-008); edit those, then regenerate with:
 --   cat infra/supabase/migrations/*.sql > infra/supabase/setup.sql (keeping this header)
 -- 001_init_tables.sql
 --
@@ -777,5 +777,23 @@ create policy game_day_playlists_all on public.game_day_playlists for all
     public.is_household_member(household_id)
     and (athlete_id is null or exists (select 1 from public.athletes a where a.id = athlete_id and a.household_id = game_day_playlists.household_id))
   );
+
+notify pgrst, 'reload schema';
+
+-- 008: creating a carpool failed with "new row violates row-level security
+-- policy for table carpools". The app reads the new carpool back right away,
+-- and the read policy looked the carpool up again by id, which the same
+-- statement can't see yet. Check the row's own household instead.
+-- Idempotent: safe to run again.
+
+-- Whether the signed-in user joined this carpool (from another family)
+create or replace function public.has_joined_carpool(cid uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.carpool_members m where m.carpool_id = cid and m.profile_id = auth.uid());
+$$;
+
+drop policy if exists carpools_select on public.carpools;
+create policy carpools_select on public.carpools for select
+  using (public.is_household_member(household_id) or public.has_joined_carpool(id));
 
 notify pgrst, 'reload schema';
