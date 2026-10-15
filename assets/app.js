@@ -488,7 +488,27 @@ function changesSeenKey() { return `sidlne-changes-seen-${state.household.id}`; 
 function unseenChanges() {
   let seen = '';
   try { seen = localStorage.getItem(changesSeenKey()) || ''; } catch {}
-  return state.changes.filter((c) => c.created_at > seen);
+  return tidyChanges(state.changes.filter((c) => c.created_at > seen));
+}
+
+// One line per game. Some team apps change an event's ID on every sync, which
+// looked like the game being cancelled and re-added: a "cancelled" for a game
+// that's still on the calendar, or a "New" for one that flip-flopped, is dropped
+function tidyChanges(list) {
+  const min = (d) => Math.round(new Date(d).getTime() / 60000);
+  const sig = (team, title, d) => `${team}|${String(title).trim().toLowerCase()}|${min(d)}`;
+  const onCalendar = new Set(state.events.map((e) => sig(e.team_id, e.title, e.start)));
+  const flipped = new Set(list.filter((c) => c.kind === 'cancelled').map((c) => sig(c.team_id, c.title, c.old_start)));
+  const now = Date.now(), seen = new Set();
+  return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at)).filter((c) => {
+    const k = sig(c.team_id, c.title, c.new_start || c.old_start);
+    if (new Date(c.new_start || c.old_start).getTime() < now - 3600000) return false;
+    if (c.kind === 'cancelled' && onCalendar.has(k)) return false;
+    if (c.kind === 'added' && flipped.has(k)) return false;
+    if (seen.has(`${c.kind}|${k}`)) return false;
+    seen.add(`${c.kind}|${k}`);
+    return true;
+  });
 }
 
 function describeChange(c) {
@@ -511,10 +531,10 @@ function changesBannerHTML() {
   const list = unseenChanges();
   if (!list.length) return '';
   return `<div class="changes-banner"><div class="changes-head"><span class="eyebrow">SCHEDULE CHANGES</span><button class="link-btn" data-action="seen-changes">Got it</button></div>
-    <ul>${list.slice(0, 5).map((c) => {
+    <ul>${list.slice(0, state.allChanges ? 50 : 3).map((c) => {
       const text = `<i>${CHANGE_ICONS[c.kind] || '•'}</i>${esc(describeChange(c))}`;
       return `<li class="change-${c.kind}">${c.event_id && byId(state.events, c.event_id) ? `<button class="text-btn" data-action="open-event" data-id="${c.event_id}">${text}</button>` : `<span>${text}</span>`}</li>`;
-    }).join('')}</ul>${list.length > 5 ? `<p class="more">+${list.length - 5} more changes</p>` : ''}</div>`;
+    }).join('')}</ul>${list.length > 3 && !state.allChanges ? `<button class="link-btn more" data-action="all-changes">+${list.length - 3} more</button>` : ''}</div>`;
 }
 
 // The most recent change to an event in the last week, for markers on the event itself
@@ -1591,7 +1611,8 @@ const actions = {
     if (!confirm('Leave this carpool? Your drives will be unassigned.')) return;
     await busy(null, async () => { must(await supabase.from('carpool_members').delete().eq('carpool_id', el.dataset.id).eq('profile_id', state.session.user.id)); await loadCarpools(); closeCarpool(); toast('You left the carpool'); });
   },
-  'seen-changes': () => { try { localStorage.setItem(changesSeenKey(), state.changes[0]?.created_at || new Date().toISOString()); } catch {} renderMain(); },
+  'seen-changes': () => { try { localStorage.setItem(changesSeenKey(), state.changes[0]?.created_at || new Date().toISOString()); } catch {} state.allChanges = false; renderMain(); },
+  'all-changes': () => { state.allChanges = true; renderMain(); },
   'rsvp': (el) => busy(null, async () => { await setRsvp(el.dataset.event, el.dataset.athlete, el.dataset.status); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.event); }),
   'claim-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, true); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),
   'release-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, false); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),

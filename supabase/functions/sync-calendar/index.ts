@@ -14,7 +14,7 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { type IcsEvent, parseIcs } from "./ics.ts";
-import { detectChanges, type SavedEvent } from "./changes.ts";
+import { detectChanges, rematchEvents, type SavedEvent } from "./changes.ts";
 import { changeMessage, type ChangeRow } from "./notify.ts";
 import { apnsConfigured, sendPush } from "./apns.ts";
 import { fetchSheetCsv } from "./sheets.ts";
@@ -193,6 +193,15 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
     .eq("source", "ical")
     .gte("start", new Date(now).toISOString());
   const saved = (savedData ?? []) as SavedEvent[];
+
+  // Keep events whose ID the team app changed (same title and time) instead of
+  // deleting and re-adding them, which would drop their rides and flood alerts
+  for (const m of rematchEvents(saved, rows)) {
+    const { error } = await supabase.from("events").update({ external_uid: m.to }).eq("id", m.id);
+    if (error) continue;
+    const e = saved.find((x) => x.id === m.id);
+    if (e) e.external_uid = m.to;
+  }
 
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await supabase
