@@ -584,6 +584,20 @@ function eventHTML(e) {
 // ---------------------------------------------------------------------------
 // Teams
 // ---------------------------------------------------------------------------
+// The team app a calendar link comes from, e.g. "TeamSnap"
+const CALENDAR_SOURCES = [
+  [/teamsnap/, 'TeamSnap'], [/sportsengine|sportngin|ngin\.com/, 'SportsEngine'], [/leagueapps/, 'LeagueApps'],
+  [/gamechanger|(^|\.)gc\.com$/, 'GameChanger'], [/sportsconnect|stacksports|bluesombrero/, 'Sports Connect'], [/crossbar/, 'Crossbar'],
+  [/playmetrics/, 'PlayMetrics'], [/spond/, 'Spond'], [/heja/, 'Heja'], [/teamlinkt/, 'TeamLinkt'], [/demosphere/, 'Demosphere'],
+  [/byga/, 'BYGA'], [/teamapp/, 'Team App'], [/google\.com/, 'Google Calendar'], [/icloud\.com/, 'Apple Calendar'],
+  [/outlook|office365|live\.com/, 'Outlook'],
+];
+function calendarSource(url) {
+  let host = '';
+  try { host = new URL(String(url).trim().replace(/^webcals?:\/\//i, 'https://')).hostname.toLowerCase(); } catch { return null; }
+  return CALENDAR_SOURCES.find(([re]) => re.test(host))?.[1] || null;
+}
+
 function teamsHTML() {
   const athletes = state.athletes.length
     ? state.athletes.map((a) => `<button class="athlete-chip" data-action="edit-athlete" data-id="${a.id}"><i class="dot" style="background:${esc(a.color)}"></i>${esc(a.name)}</button>`).join('')
@@ -592,7 +606,7 @@ function teamsHTML() {
     ? `<div class="teams">${state.teams.map((t) => {
       const a = byId(state.athletes, t.athlete_id);
       return `<div class="team-card"><div class="team-icon">${SPORT_ICONS[t.sport] || '🏅'}</div><h2>${esc(t.name)}</h2><p>${esc([a?.name, t.sport].filter(Boolean).join(' · ') || 'No athlete assigned')}</p>
-        <p class="meta">${t.calendar_url ? (t.last_sync_error ? `<span class="sync-err">● Sync problem</span> · ${esc(t.last_sync_error)}` : t.last_synced_at ? `<span class="sync-ok">● Calendar linked</span> · synced ${esc(fmtDate(t.last_synced_at))} ${esc(fmtTime(t.last_synced_at))}` : '<span class="sync-ok">● Calendar linked</span> · not synced yet') : 'No calendar link · add events by hand'}</p>
+        <p class="meta">${t.calendar_url ? (t.last_sync_error ? `<span class="sync-err">● Sync problem</span> · ${esc(t.last_sync_error)}` : t.last_synced_at ? `<span class="sync-ok">● ${calendarSource(t.calendar_url) ? `Synced from ${esc(calendarSource(t.calendar_url))}` : 'Calendar linked'}</span> · ${esc(fmtDate(t.last_synced_at))} ${esc(fmtTime(t.last_synced_at))}` : `<span class="sync-ok">● ${calendarSource(t.calendar_url) ? `Linked to ${esc(calendarSource(t.calendar_url))}` : 'Calendar linked'}</span> · not synced yet`) : 'No calendar link · add events by hand'}</p>
         <div class="row-actions">${t.calendar_url ? `<button class="outline" data-action="sync-team" data-id="${t.id}">Sync now</button>` : ''}<button class="outline" data-action="edit-team" data-id="${t.id}">Edit</button>${a ? `<button class="link-btn" data-action="filter-athlete" data-id="${a.id}">View lineup</button>` : ''}</div></div>`;
     }).join('')}</div>`
     : '<div class="panel empty"><h3>No teams yet.</h3><p>Add a team to color-code events and import its schedule.</p></div>';
