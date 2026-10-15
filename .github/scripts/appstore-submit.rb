@@ -98,7 +98,9 @@ api(:patch, "/v1/appStoreVersions/#{version_id}", { data: { type: "appStoreVersi
   attributes: { copyright: LISTING["copyright"], releaseType: LISTING["releaseType"] } } })
 
 # --- Store text ------------------------------------------------------------------
-locale = LISTING["locale"]
+# Write the listing in the app's primary language (set when the app was created)
+locale = app.dig("attributes", "primaryLocale") || LISTING["locale"]
+step "Primary language: #{locale}"
 locs = api(:get, "/v1/appStoreVersions/#{version_id}/appStoreVersionLocalizations?limit=50")["data"]
 loc = locs.find { |l| l.dig("attributes", "locale") == locale }
 text = { description: LISTING["description"], keywords: LISTING["keywords"], promotionalText: LISTING["promotionalText"],
@@ -118,9 +120,15 @@ api(:patch, "/v1/appInfos/#{info["id"]}", { data: { type: "appInfos", id: info["
   primaryCategory: rel("appCategories", LISTING["primaryCategory"]),
   secondaryCategory: rel("appCategories", LISTING["secondaryCategory"]) } } })
 info_locs = api(:get, "/v1/appInfos/#{info["id"]}/appInfoLocalizations?limit=50")["data"]
-if (il = info_locs.find { |l| l.dig("attributes", "locale") == locale })
-  api(:patch, "/v1/appInfoLocalizations/#{il["id"]}", { data: { type: "appInfoLocalizations", id: il["id"],
-    attributes: { subtitle: LISTING["subtitle"], privacyPolicyUrl: LISTING["privacyPolicyUrl"] } } })
+if info_locs.none? { |l| l.dig("attributes", "locale") == locale }
+  info_locs << api(:post, "/v1/appInfoLocalizations", { data: { type: "appInfoLocalizations",
+    attributes: { locale: locale, name: app.dig("attributes", "name") }, relationships: { appInfo: rel("appInfos", info["id"]) } } })["data"]
+end
+# Every language needs the privacy policy link; the subtitle goes on the primary one
+info_locs.each do |il|
+  attrs = { privacyPolicyUrl: LISTING["privacyPolicyUrl"] }
+  attrs[:subtitle] = LISTING["subtitle"] if il.dig("attributes", "locale") == locale
+  api(:patch, "/v1/appInfoLocalizations/#{il["id"]}", { data: { type: "appInfoLocalizations", id: il["id"], attributes: attrs } })
 end
 step "Subtitle, privacy policy and categories set"
 
