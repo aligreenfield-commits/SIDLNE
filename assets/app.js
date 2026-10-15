@@ -65,7 +65,7 @@ const NAV = Object.keys(icons);
 const TITLES = {
   Overview: ['All your sports. Zero chaos.', 'Everything coming up for your crew.'],
   Calendar: ['The whole game plan.', 'Switch between week and month views.'],
-  Teams: ['One crew. Many teams.', 'Athletes, teams and their calendar links.'],
+  Teams: ['Bring it all together.', 'Every team app, synced into one family calendar.'],
   Rides: ['Who’s got the ride?', 'Claim a drive, or set up a carpool with other families.'],
   Chat: ['Keep the crew in the loop.', 'Messages are shared with everyone in your family.'],
   Family: ['Your family, your rules.', 'Invite people, manage members and your account.'],
@@ -597,6 +597,35 @@ function calendarSource(url) {
   return CALENDAR_SOURCES.find(([re]) => re.test(host))?.[1] || null;
 }
 
+const APP_ABBR = { TeamSnap: 'TS', SportsEngine: 'SE', LeagueApps: 'LA', GameChanger: 'GC', 'Sports Connect': 'SC', Crossbar: 'CB', PlayMetrics: 'PM', Spond: 'SP', Heja: 'HJ', TeamLinkt: 'TL', Demosphere: 'DS', BYGA: 'BY', 'Team App': 'TA', 'Google Calendar': 'GO', 'Apple Calendar': 'AP', Outlook: 'OL' };
+
+// The family's team apps (grouped by where each team's calendar comes from), with sync status
+function appsHTML() {
+  const groups = new Map();
+  for (const t of state.teams) {
+    const name = t.calendar_url ? calendarSource(t.calendar_url) || 'Team calendar' : 'Added by hand';
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(t);
+  }
+  const order = [...groups.keys()].sort((a, b) => (a === 'Added by hand') - (b === 'Added by hand') || a.localeCompare(b));
+  const rows = order.map((name) => {
+    const teams = groups.get(name);
+    const manual = name === 'Added by hand';
+    const broken = teams.some((t) => t.calendar_url && t.last_sync_error);
+    const status = manual ? '<span class="status muted">MANUAL</span>'
+      : broken ? '<span class="status bad">● SYNC PROBLEM</span>'
+      : teams.some((t) => t.last_synced_at) ? '<span class="status">● ACTIVE</span>' : '<span class="status">● CONNECTING</span>';
+    const abbr = manual ? '✎' : APP_ABBR[name] || name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    return `<div class="app-row"><span class="app-logo">${esc(abbr)}</span><span><strong>${esc(name)}</strong><small>${teams.length} ${teams.length === 1 ? 'team' : 'teams'} · ${esc(teams.map((t) => t.name).join(', '))}</small></span>${status}</div>`;
+  }).join('');
+  const connected = new Set(order);
+  const more = ['TeamSnap', 'SportsEngine', 'GameChanger', 'LeagueApps', 'Sports Connect', 'Crossbar'].filter((n) => !connected.has(n));
+  return `<div class="apps section"><div class="panel-head" style="padding:0 0 10px"><h2>Your connected apps</h2><span class="source">Synced automatically</span></div>
+    ${rows || '<p class="subtitle">No team apps connected yet. Add a team and paste its calendar link from TeamSnap, SportsEngine, GameChanger and more.</p>'}
+    ${more.length ? `<p class="works-with">Also works with ${more.map((n) => `<b>${esc(n)}</b>`).join(', ')} and any team calendar link.</p>` : ''}
+    <div class="row-actions"><button class="primary" data-action="add-team">＋ Connect a team app</button></div></div>`;
+}
+
 function teamsHTML() {
   const athletes = state.athletes.length
     ? state.athletes.map((a) => `<button class="athlete-chip" data-action="edit-athlete" data-id="${a.id}"><i class="dot" style="background:${esc(a.color)}"></i>${esc(a.name)}</button>`).join('')
@@ -609,7 +638,7 @@ function teamsHTML() {
         <div class="row-actions">${t.calendar_url ? `<button class="outline" data-action="sync-team" data-id="${t.id}">Sync now</button>` : ''}<button class="outline" data-action="edit-team" data-id="${t.id}">Edit</button>${a ? `<button class="link-btn" data-action="filter-athlete" data-id="${a.id}">View lineup</button>` : ''}</div></div>`;
     }).join('')}</div>`
     : '<div class="panel empty"><h3>No teams yet.</h3><p>Add a team to color-code events and import its schedule.</p></div>';
-  return `<div class="section"><div class="section-head"><h2>Athletes</h2><button class="outline" data-action="add-athlete">＋ Add athlete</button></div><div class="athlete-chips">${athletes}</div></div>
+  return `${appsHTML()}<div class="section"><div class="section-head"><h2>Athletes</h2><button class="outline" data-action="add-athlete">＋ Add athlete</button></div><div class="athlete-chips">${athletes}</div></div>
     <div class="section"><div class="section-head"><h2>Teams</h2><button class="outline" data-action="add-team">＋ Add team</button></div>${teams}</div>
     <div class="rail-card"><h2>Where do I find a team’s calendar link?</h2><p><strong>TeamSnap:</strong> Schedule → Export → Subscribe, copy the link.<br><strong>SportsEngine:</strong> Team page → Calendar → Subscribe → copy iCal link.<br><strong>LeagueApps / Sports Connect / Crossbar / GameChanger:</strong> look for “Subscribe”, “Sync calendar” or “iCal”.<br>Links starting with <code>webcal://</code> work too.</p></div>`;
 }
