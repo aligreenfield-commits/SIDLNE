@@ -45,8 +45,8 @@ class ApiError < StandardError
     lines = errors.map { |e| [e["title"], e["detail"]].compact.join(": ") }
     # Apple lists what blocks a submission under meta.associatedErrors
     errors.each do |e|
-      (e.dig("meta", "associatedErrors") || {}).each do |_, list|
-        Array(list).each { |a| lines << "  - #{[a["code"], a["detail"] || a["title"]].compact.join(": ")}" }
+      (e.dig("meta", "associatedErrors") || {}).each do |where, list|
+        Array(list).each { |a| lines << "  - #{where}: #{[a["code"], a["detail"] || a["title"]].compact.join(": ")}" }
       end
     end
     details = lines.empty? ? nil : lines.join(" | ")
@@ -129,6 +129,13 @@ info_locs.each do |il|
   attrs = { privacyPolicyUrl: LISTING["privacyPolicyUrl"] }
   attrs[:subtitle] = LISTING["subtitle"] if il.dig("attributes", "locale") == locale
   api(:patch, "/v1/appInfoLocalizations/#{il["id"]}", { data: { type: "appInfoLocalizations", id: il["id"], attributes: attrs } })
+  # Apple can also ask for the policy as text; a short summary pointing at the full policy
+  begin
+    api(:patch, "/v1/appInfoLocalizations/#{il["id"]}", { data: { type: "appInfoLocalizations", id: il["id"],
+      attributes: { privacyPolicyText: LISTING["privacyPolicyText"] } } })
+  rescue ApiError => e
+    puts "  (privacy policy text not accepted for #{il.dig("attributes", "locale")}: #{e.message[0, 200]})"
+  end
 end
 step "Subtitle, privacy policy and categories set"
 
