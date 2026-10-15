@@ -371,3 +371,5 @@ a.directions,a.directions:visited{color:var(--ink)}
 @media(max-width:700px){.song-list{grid-template-columns:1fr}.gameday-strip .primary{width:100%}}
 .siri-list{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px}
 .siri-list li{background:#f4f6f1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-weight:600}
+a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;color:var(--ink);white-space:nowrap}
+@media(max-width:520px){.rail{grid-template-columns:1fr}}
