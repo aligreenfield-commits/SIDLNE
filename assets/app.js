@@ -95,7 +95,7 @@ function memberName(id) {
 // Waze universal link: opens the Waze app if installed, otherwise waze.com, and starts navigation
 function wazeUrl(location) { return `https://waze.com/ul?q=${encodeURIComponent(location)}&navigate=yes`; }
 function directionsButton(location, cls = 'outline') {
-  return location ? `<a class="${cls} directions" href="${esc(wazeUrl(location))}" target="_blank" rel="noopener">🧭 Waze directions</a>` : '';
+  return location ? `<a class="${cls} directions" href="${esc(wazeUrl(location))}" target="_blank" rel="noopener" aria-label="Take me there (opens Waze)">🧭 Take me there</a>` : '';
 }
 function friendlyError(err) {
   const msg = err?.message || String(err);
