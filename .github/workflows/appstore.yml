@@ -1,0 +1,116 @@
+# Fills in the App Store listing and sends SIDLNE to App Review.
+#
+# Run it from Actions > Submit to App Store > Run workflow. It:
+#   1. Creates (or refreshes) the demo account Apple's reviewer signs in with,
+#      with a sample family whose games are always in the coming weeks
+#   2. Sets the description, keywords, subtitle, categories, age rating, price (free),
+#      availability, screenshots (appstore/) and App Review notes
+#   3. Attaches the newest processed build and submits it for review
+#      (uncheck "submit" to only fill in the listing)
+#
+# Uses the App Store Connect key from ios.yml and SUPABASE_ACCESS_TOKEN.
+# Apple also needs a contact for the review, in the NEW KEYS environment:
+#   APP_REVIEW_CONTACT_NAME   First and last name
+#   APP_REVIEW_PHONE          Phone number, with country code (e.g. +1 555 123 4567)
+# App Privacy answers can't be set through Apple's API: fill them in once on
+# appstoreconnect.apple.com (see APP_STORE.md, section 6).
+
+name: Submit to App Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: "Submit for App Review (otherwise only fill in the listing)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appstore
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    environment: NEW KEYS
+    env:
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
+      DEFAULT_ASC_KEY_ID: T66KX7L8H8
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
+      ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'reufyrhowxxivpmobouz' }}
+      CONTACT_NAME: ${{ secrets.APP_REVIEW_CONTACT_NAME }}
+      CONTACT_PHONE: ${{ secrets.APP_REVIEW_PHONE }}
+      CONTACT_EMAIL: ${{ secrets.APP_REVIEW_EMAIL || 'support@sidlne.app' }}
+      REVIEW_EMAIL: appreview@sidlne.app
+      SUBMIT: ${{ inputs.submit }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Demo account for App Review
+        run: |
+          set -euo pipefail
+          token="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          [ -n "$token" ] || { echo "::error::SUPABASE_ACCESS_TOKEN is missing."; exit 1; }
+          base="https://$SUPABASE_PROJECT_REF.supabase.co"
+
+          # The project's server key, to manage users (never printed)
+          curl -fsS "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys?reveal=true" \
+            -H "Authorization: Bearer $token" > keys.json
+          SERVICE="$(jq -r '(map(select(.name == "service_role")) + map(select(.type == "secret")))[0].api_key // empty' keys.json)"
+          rm -f keys.json
+          [ -n "$SERVICE" ] || { echo "::error::Couldn't read the project's service key (the Supabase token needs access to API keys)."; exit 1; }
+          echo "::add-mask::$SERVICE"
+          AUTH=(-H "apikey: $SERVICE" -H "Content-Type: application/json")
+          [[ "$SERVICE" == eyJ* ]] && AUTH+=(-H "Authorization: Bearer $SERVICE")
+
+          # A fresh password every run; it only goes to Apple
+          PASSWORD="Sidlne-$(openssl rand -hex 8)"
+          echo "::add-mask::$PASSWORD"
+
+          body="$(jq -n --arg e "$REVIEW_EMAIL" --arg p "$PASSWORD" '{email: $e, password: $p, email_confirm: true, user_metadata: {display_name: "Sam Rivera"}}')"
+          status=$(curl -sS -o user.json -w '%{http_code}' -X POST "$base/auth/v1/admin/users" "${AUTH[@]}" --data "$body")
+          if [ "$status" -ge 300 ]; then
+            # Already exists: find it and set the new password
+            uid=""
+            for page in 1 2 3 4 5 6 7 8 9 10; do
+              curl -fsS "$base/auth/v1/admin/users?page=$page&per_page=200" "${AUTH[@]}" > users.json
+              uid="$(jq -r --arg e "$REVIEW_EMAIL" '.users[] | select(.email == $e) | .id' users.json | head -1)"
+              [ -n "$uid" ] && break
+              [ "$(jq '.users | length' users.json)" -lt 200 ] && break
+            done
+            [ -n "$uid" ] || { echo "::error::Couldn't create or find the demo account (HTTP $status)."; exit 1; }
+            curl -fsS -o /dev/null -X PUT "$base/auth/v1/admin/users/$uid" "${AUTH[@]}" \
+              --data "$(jq -n --arg p "$PASSWORD" '{password: $p, email_confirm: true}')"
+          else
+            uid="$(jq -r .id user.json)"
+          fi
+          rm -f user.json users.json
+          [[ "$uid" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::Unexpected user id."; exit 1; }
+
+          # Sample family, rebuilt so the schedule is current
+          sed "s/__REVIEW_UID__/$uid/" infra/supabase/review-seed.sql > seed.sql
+          jq -n --rawfile q seed.sql '{query: $q}' > body.json
+          status=$(curl -sS -o seed-response.json -w '%{http_code}' -X POST \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" --data @body.json)
+          [ "$status" -lt 300 ] || { echo "::error::Couldn't add the sample data (HTTP $status): $(head -c 500 seed-response.json)"; exit 1; }
+          echo "Demo account $REVIEW_EMAIL is ready with the Review Family sample data."
+          echo "REVIEW_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Fill in the App Store listing and submit
+        run: |
+          set -euo pipefail
+          ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
+          [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || ASC_KEY_ID="$DEFAULT_ASC_KEY_ID"
+          KEY_BODY="$(printf '%s' "$ASC_KEY" | sed '/-----/d' | tr -d '[:space:]')"
+          [ "${#KEY_BODY}" -ge 100 ] || { echo "::error::APP_STORE_CONNECT_KEY is missing."; exit 1; }
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf -- '-----BEGIN PRIVATE KEY-----\n%s\n-----END PRIVATE KEY-----\n' "$(printf '%s' "$KEY_BODY" | fold -w 64)" > "$KEY_PATH"
+          ASC_ISSUER_ID="$(printf '%s' "$ASC_ISSUER_ID" | tr -d '[:space:]')"
+          ruby .github/scripts/asc-check.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID"
+          ruby .github/scripts/appstore-submit.rb "$KEY_PATH" "$ASC_KEY_ID" "$(< "$KEY_PATH.issuer")"

@@ -69,6 +69,28 @@ The app build turns on the Push Notifications capability for `com.gmail.sidlne` 
 
 Install **TestFlight** from the App Store. In App Store Connect, go to **TestFlight → Internal Testing**, add yourself, and install SIDLNE from the TestFlight app.
 
+## Submit with one click
+
+**Actions → Submit to App Store → Run workflow** does sections 5 and 7 for you, plus pricing (free) and availability (all countries). It:
+- creates the reviewer demo account (`appreview@sidlne.app`, a sample "Review Family", and a new password each run)
+- fills in the listing from `appstore/listing.json`
+- uploads the screenshots in `appstore/screenshots/`
+- attaches the newest processed build
+- submits for review
+
+The app goes live automatically once Apple approves it.
+
+Two things only you can do, once:
+1. **App Privacy** (section 6). Apple has no API for it, so fill it in on appstoreconnect.apple.com.
+2. **A review contact.** In GitHub → Settings → Environments → NEW KEYS, add:
+   - `APP_REVIEW_CONTACT_NAME` (first and last name)
+   - `APP_REVIEW_PHONE` (with country code)
+   - optionally `APP_REVIEW_EMAIL` (defaults to support@sidlne.app)
+
+   Apple only uses these to reach you about the review; they aren't shown on the App Store.
+
+To change the listing later, edit `appstore/listing.json` (or the screenshots) and run the workflow again.
+
 ## 5. Store listing (copy and paste)
 
 **Subtitle** (30 characters max)
