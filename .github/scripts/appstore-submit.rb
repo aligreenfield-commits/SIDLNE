@@ -41,7 +41,15 @@ class ApiError < StandardError
   def initialize(status, body, what)
     @status = status
     @body = body
-    details = (JSON.parse(body)["errors"] rescue nil)&.map { |e| [e["title"], e["detail"]].compact.join(": ") }&.join(" | ")
+    errors = (JSON.parse(body)["errors"] rescue nil) || []
+    lines = errors.map { |e| [e["title"], e["detail"]].compact.join(": ") }
+    # Apple lists what blocks a submission under meta.associatedErrors
+    errors.each do |e|
+      (e.dig("meta", "associatedErrors") || {}).each do |_, list|
+        Array(list).each { |a| lines << "  - #{[a["code"], a["detail"] || a["title"]].compact.join(": ")}" }
+      end
+    end
+    details = lines.empty? ? nil : lines.join(" | ")
     super("#{what} failed (HTTP #{status}): #{details || body.to_s[0, 400]}")
   end
 end
