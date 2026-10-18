@@ -32,7 +32,7 @@ jobs:
           # Shape check (never prints the token): Supabase access tokens start with sbp_
           if [ -z "$token" ]; then echo "::error::SUPABASE_ACCESS_TOKEN is empty."; exit 1; fi
           case "$token" in
-            sbp_*) echo "Token looks like a Supabase access token (sbp_…, ${#token} characters)." ;;
+            sbp_*) echo "Token looks like a Supabase access token (sbp_…, ${#token} characters, fingerprint $(printf %s "$token" | sha256sum | cut -c1-8))." ;;
             eyJ*|sb_secret_*|sb_publishable_*) echo "::error::SUPABASE_ACCESS_TOKEN holds a project API key, not an account access token. Make one at supabase.com/dashboard/account/tokens (it starts with sbp_)."; exit 1 ;;
             *) echo "::warning::SUPABASE_ACCESS_TOKEN doesn't start with sbp_ (${#token} characters); it may not be a Supabase access token." ;;
           esac
