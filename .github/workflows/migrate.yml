@@ -21,6 +21,7 @@ permissions:
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    environment: NEW KEYS
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
