@@ -29,6 +29,13 @@ jobs:
           f="infra/supabase/fixes/$FIX_FILE"
           [ -f "$f" ] || { echo "::error::$f not found"; exit 1; }
           token="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          # Shape check (never prints the token): Supabase access tokens start with sbp_
+          if [ -z "$token" ]; then echo "::error::SUPABASE_ACCESS_TOKEN is empty."; exit 1; fi
+          case "$token" in
+            sbp_*) echo "Token looks like a Supabase access token (sbp_…, ${#token} characters)." ;;
+            eyJ*|sb_secret_*|sb_publishable_*) echo "::error::SUPABASE_ACCESS_TOKEN holds a project API key, not an account access token. Make one at supabase.com/dashboard/account/tokens (it starts with sbp_)."; exit 1 ;;
+            *) echo "::warning::SUPABASE_ACCESS_TOKEN doesn't start with sbp_ (${#token} characters); it may not be a Supabase access token." ;;
+          esac
           jq -n --rawfile q "$f" '{query: $q}' > body.json
           status=$(curl -sS -o response.json -w '%{http_code}' -X POST \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
