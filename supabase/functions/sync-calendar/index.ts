@@ -14,7 +14,7 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { type IcsEvent, parseIcs } from "./ics.ts";
-import { detectChanges, rematchEvents, type SavedEvent } from "./changes.ts";
+import { detectChanges, duplicateIds, rematchEvents, type SavedEvent } from "./changes.ts";
 import { changeMessage, type ChangeRow } from "./notify.ts";
 import { apnsConfigured, sendPush } from "./apns.ts";
 import { fetchSheetCsv } from "./sheets.ts";
@@ -185,21 +185,29 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
     ...(actorId ? { created_by: actorId } : {}),
   }));
 
-  // Snapshot of the upcoming events already saved, to spot what changed
-  const { data: savedData } = await supabase
-    .from("events")
-    .select("id, external_uid, title, start, location")
-    .eq("team_id", team.id)
-    .eq("source", "ical")
-    .gte("start", new Date(now).toISOString());
-  const saved = (savedData ?? []) as SavedEvent[];
+  // Events already saved for this team in the import window (paged: the API
+  // returns at most 1000 rows at a time)
+  const all: SavedEvent[] = [];
+  for (let page = 0; page < 50; page++) {
+    const { data, error } = await supabase
+      .from("events")
+      .select("id, external_uid, title, start, location")
+      .eq("team_id", team.id)
+      .eq("source", "ical")
+      .gte("start", new Date(from).toISOString())
+      .order("start")
+      .range(page * 1000, page * 1000 + 999);
+    if (error) return fail(error.message, 400);
+    all.push(...((data ?? []) as SavedEvent[]));
+    if (!data || data.length < 1000) break;
+  }
 
   // Keep events whose ID the team app changed (same title and time) instead of
   // deleting and re-adding them, which would drop their rides and flood alerts
-  for (const m of rematchEvents(saved, rows)) {
+  for (const m of rematchEvents(all, rows)) {
     const { error } = await supabase.from("events").update({ external_uid: m.to }).eq("id", m.id);
     if (error) continue;
-    const e = saved.find((x) => x.id === m.id);
+    const e = all.find((x) => x.id === m.id);
     if (e) e.external_uid = m.to;
   }
 
@@ -210,10 +218,15 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
     if (error) return fail(error.message, 400);
   }
 
-  // Remove future imported events that the feed no longer contains (cancellations)
+  // Remove extra copies of games still in the feed (past or future), and future
+  // imported events the feed no longer contains (cancellations)
   const keep = new Set(rows.map((r) => r.external_uid));
-  const stale = saved.filter((e) => !keep.has(e.external_uid)).map((e) => e.id);
-  if (stale.length) await supabase.from("events").delete().in("id", stale);
+  const dupes = new Set(duplicateIds(all, rows));
+  const saved = all.filter((e) => new Date(e.start).getTime() >= now && !dupes.has(e.id));
+  const stale = [...dupes, ...saved.filter((e) => !keep.has(e.external_uid)).map((e) => e.id)];
+  for (let i = 0; i < stale.length; i += 200) {
+    await supabase.from("events").delete().in("id", stale.slice(i, i + 200));
+  }
 
   // Schedule-change alerts (skipped on a team's first import, when everything is new)
   let recorded: ChangeRow[] = [];

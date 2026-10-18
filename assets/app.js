@@ -157,6 +157,27 @@ async function selectHousehold(id) {
   subscribe();
 }
 
+// The family's events from `since` on, a page at a time (the API returns at most
+// 1000 rows per request), with exact repeats of the same game shown once
+async function fetchEvents(hid, since) {
+  const all = [];
+  for (let page = 0; page < 10; page++) {
+    const { data, error } = await supabase.from('events').select('*').eq('household_id', hid).gte('start', since)
+      .order('start').order('id').range(page * 1000, page * 1000 + 999);
+    if (error) return { data: null, error };
+    all.push(...data);
+    if (data.length < 1000) break;
+  }
+  const seen = new Set();
+  const data = all.filter((e) => {
+    const k = `${e.team_id}|${String(e.title).trim().toLowerCase()}|${e.start}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return { data, error: null };
+}
+
 async function loadHouseholdData() {
   const hid = state.household.id;
   const since = new Date(Date.now() - 120 * DAY).toISOString();
@@ -164,7 +185,7 @@ async function loadHouseholdData() {
     supabase.from('household_members').select('id, role, profile_id, profiles(id, display_name, email)').eq('household_id', hid),
     supabase.from('athletes').select('*').eq('household_id', hid).order('created_at'),
     supabase.from('teams').select('*').eq('household_id', hid).order('inserted_at'),
-    supabase.from('events').select('*').eq('household_id', hid).gte('start', since).order('start').limit(5000),
+    fetchEvents(hid, since),
     supabase.from('rides').select('*, events!inner(household_id)').eq('events.household_id', hid),
     supabase.from('messages').select('*').eq('household_id', hid).order('inserted_at', { ascending: false }).limit(200),
   ]);
@@ -205,7 +226,7 @@ async function reload(...tables) {
   const hid = state.household.id;
   const since = new Date(Date.now() - 120 * DAY).toISOString();
   const jobs = {
-    events: async () => { state.events = must(await supabase.from('events').select('*').eq('household_id', hid).gte('start', since).order('start').limit(5000)); },
+    events: async () => { state.events = must(await fetchEvents(hid, since)); },
     rides: async () => { state.rides = must(await supabase.from('rides').select('*, events!inner(household_id)').eq('events.household_id', hid)); },
     teams: async () => { state.teams = must(await supabase.from('teams').select('*').eq('household_id', hid).order('inserted_at')); },
     athletes: async () => { state.athletes = must(await supabase.from('athletes').select('*').eq('household_id', hid).order('created_at')); },
