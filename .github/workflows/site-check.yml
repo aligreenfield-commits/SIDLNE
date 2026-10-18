@@ -44,4 +44,12 @@ jobs:
           echo "--- Cloudflare Pages project address ---"
           curl -sS -o /dev/null -w 'https://sidlne.pages.dev -> HTTP %{http_code}\n' --max-time 20 https://sidlne.pages.dev/ || echo "sidlne.pages.dev not reachable"
           echo "--- Nameservers for sidlne.app ---"; dig +short NS sidlne.app @1.1.1.1 || true
+          echo "--- Backend (Supabase) the app talks to ---"
+          cfg="$(curl -sS -L --max-time 20 https://sidlne.app/config.js)"
+          url="$(printf '%s' "$cfg" | grep -oE 'https://[a-z0-9]+\.supabase\.co' | head -1)"
+          key="$(printf '%s' "$cfg" | grep -oE '(eyJ[A-Za-z0-9._-]{40,}|sb_publishable_[A-Za-z0-9_-]+)' | head -1)"
+          for ep in auth/v1/health "rest/v1/" "functions/v1/sync-calendar"; do
+            code=$(curl -sS -o /tmp/be -w '%{http_code}' --max-time 20 -H "apikey: $key" "$url/$ep" || echo 000)
+            echo "$ep -> HTTP $code $(head -c 160 /tmp/be | tr -d '\n')"
+          done
           exit $fail
