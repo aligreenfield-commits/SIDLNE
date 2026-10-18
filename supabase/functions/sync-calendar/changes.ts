@@ -44,6 +44,15 @@ export function rematchEvents(saved: SavedEvent[], feed: FeedEvent[]): { id: str
   return pairs;
 }
 
+// Saved events that are extra copies of a game still in the feed: their ID isn't
+// in the feed any more, but the same title and start are. Some team apps give
+// every event a new ID on each download, which left one copy per sync behind.
+export function duplicateIds(saved: SavedEvent[], feed: FeedEvent[]): string[] {
+  const feedUids = new Set(feed.map((e) => e.external_uid));
+  const inFeed = new Set(feed.map((e) => sameEvent(e.title, e.start)));
+  return saved.filter((e) => !feedUids.has(e.external_uid) && inFeed.has(sameEvent(e.title, e.start))).map((e) => e.id);
+}
+
 export function detectChanges(saved: SavedEvent[], feed: FeedEvent[], now: number): Change[] {
   const before = new Map(saved.map((e) => [e.external_uid, e]));
   const after = new Map(feed.map((e) => [e.external_uid, e]));
