@@ -797,7 +797,7 @@ function eventForm(e, dateKey) {
   showModal(`<span class="eyebrow">${e ? 'EDIT EVENT' : 'NEW EVENT'}</span><h2>${e ? esc(e.title) : 'Add an event'}</h2>${e?.source === 'ical' ? '<p>This event comes from a team calendar. Changes may be replaced the next time it syncs.</p>' : ''}
     <form class="form" data-form="event" data-id="${e?.id || ''}"><label>Event name<input name="title" required maxlength="200" value="${esc(e?.title)}" placeholder="Practice, game, tournament…"></label>
     <div class="form-grid"><label>Athlete<select name="athlete_id"><option value="">Everyone</option>${state.athletes.map((a) => `<option value="${a.id}" ${athleteOf(e || {})?.id === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
-    <label>Team<select name="team_id"><option value="">—</option>${state.teams.map((t) => `<option value="${t.id}" ${e?.team_id === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label></div>
+    <label>Team<select name="team_id" ${e?.source === 'ical' && e.team_id ? 'disabled title="Set by the team calendar"' : ''}><option value="">—</option>${state.teams.map((t) => `<option value="${t.id}" ${e?.team_id === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label></div>
     <div class="form-grid three"><label>Date<input name="date" type="date" required value="${key(start)}"></label><label>Starts<input name="start" type="time" required value="${timeInput(start)}"></label><label>Ends<input name="end" type="time" value="${timeInput(end)}"></label></div>
     <label>Location<input name="location" maxlength="200" value="${esc(e?.location)}" placeholder="Field, gym or address"></label>
     <label>Notes<textarea name="description" maxlength="2000">${esc(e?.description)}</textarea></label>
@@ -1832,7 +1832,11 @@ const forms = {
     const start = new Date(`${date}T${f.get('start')}`);
     let end = f.get('end') ? new Date(`${date}T${f.get('end')}`) : null;
     if (end && end < start) end = new Date(+end + DAY); // ends after midnight
-    const team = byId(state.teams, f.get('team_id'));
+    const id = form.dataset.id;
+    const original = id ? byId(state.events, id) : null;
+    // An event from a team calendar stays with its team, so the next sync
+    // keeps updating it instead of adding a second copy
+    const team = original?.source === 'ical' && original.team_id ? byId(state.teams, original.team_id) || { id: original.team_id } : byId(state.teams, f.get('team_id'));
     const values = {
       title: f.get('title').trim(),
       athlete_id: f.get('athlete_id') || team?.athlete_id || null,
@@ -1842,7 +1846,6 @@ const forms = {
       location: f.get('location').trim() || null,
       description: f.get('description').trim() || null,
     };
-    const id = form.dataset.id;
     if (id) must(await supabase.from('events').update(values).eq('id', id));
     else must(await supabase.from('events').insert({ ...values, household_id: state.household.id, created_by: state.session.user.id, source: 'manual' }));
     await reload('events');
