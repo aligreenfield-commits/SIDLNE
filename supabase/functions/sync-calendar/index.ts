@@ -185,6 +185,15 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
     ...(actorId ? { created_by: actorId } : {}),
   }));
 
+  // Imported events that lost their team (e.g. edited with the team cleared)
+  // go back to it, so they're updated in place instead of being copied
+  const uids = rows.map((r) => r.external_uid);
+  for (let i = 0; i < uids.length; i += 200) {
+    await supabase.from("events").update({ team_id: team.id })
+      .eq("household_id", team.household_id).is("team_id", null).eq("source", "ical")
+      .in("external_uid", uids.slice(i, i + 200));
+  }
+
   // Events already saved for this team in the import window (paged: the API
   // returns at most 1000 rows at a time)
   const all: SavedEvent[] = [];
