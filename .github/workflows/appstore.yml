@@ -24,6 +24,10 @@ on:
         description: "Submit for App Review (otherwise only fill in the listing)"
         type: boolean
         default: true
+      testflight:
+        description: "Open a public TestFlight link with the newest build (sends it to Apple's beta review) instead of touching the App Store listing"
+        type: boolean
+        default: false
       status_only:
         description: "Only check where the app stands in App Review (changes nothing)"
         type: boolean
@@ -58,6 +62,7 @@ jobs:
       SUBMIT: ${{ inputs.submit }}
       WITHDRAW: ${{ inputs.withdraw }}
       STATUS_ONLY: ${{ inputs.status_only }}
+      TESTFLIGHT: ${{ inputs.testflight }}
     steps:
       - uses: actions/checkout@v4
 
@@ -125,4 +130,8 @@ jobs:
           printf -- '-----BEGIN PRIVATE KEY-----\n%s\n-----END PRIVATE KEY-----\n' "$(printf '%s' "$KEY_BODY" | fold -w 64)" > "$KEY_PATH"
           ASC_ISSUER_ID="$(printf '%s' "$ASC_ISSUER_ID" | tr -d '[:space:]')"
           ruby .github/scripts/asc-check.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID"
-          ruby .github/scripts/appstore-submit.rb "$KEY_PATH" "$ASC_KEY_ID" "$(< "$KEY_PATH.issuer")"
+          if [ "$TESTFLIGHT" = "true" ]; then
+            ruby .github/scripts/testflight-public.rb "$KEY_PATH" "$ASC_KEY_ID" "$(< "$KEY_PATH.issuer")"
+          else
+            ruby .github/scripts/appstore-submit.rb "$KEY_PATH" "$ASC_KEY_ID" "$(< "$KEY_PATH.issuer")"
+          fi
