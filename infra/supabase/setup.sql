@@ -1,6 +1,6 @@
 -- setup.sql: the complete SIDLNE database setup in one file.
 -- Paste into Supabase > SQL Editor and click Run. Safe to run again.
--- Generated from migrations/ (001-009); edit those, then regenerate with:
+-- Generated from migrations/ (001-010); edit those, then regenerate with:
 --   cat infra/supabase/migrations/*.sql > infra/supabase/setup.sql (keeping this header)
 -- 001_init_tables.sql
 --
@@ -823,5 +823,15 @@ language sql stable security definer set search_path = public as $$
   order by e.start
   limit 300;
 $$;
+
+notify pgrst, 'reload schema';
+
+-- 010: a team can take only some events from its calendar link, e.g. when one
+-- club (Crossbar, SportsEngine...) calendar mixes several kids or sports.
+-- event_filter holds words separated by commas; an event is imported when its
+-- title contains any of them. Idempotent: safe to run again.
+
+alter table public.teams add column if not exists event_filter text
+  check (event_filter is null or char_length(event_filter) <= 120);
 
 notify pgrst, 'reload schema';
