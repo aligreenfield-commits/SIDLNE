@@ -42,8 +42,17 @@ type Team = {
   athlete_id: string | null;
   calendar_url: string | null;
   last_synced_at: string | null;
+  event_filter?: string | null;
 };
-const TEAM_COLUMNS = "id, name, household_id, athlete_id, calendar_url, last_synced_at";
+// "*" so the function keeps working before and after a migration adds a column
+const TEAM_COLUMNS = "*";
+
+// A team's event filter: words separated by commas; an event matches when its
+// title contains any of them (an empty filter matches everything)
+function matchesFilter(filter: string | null | undefined, title: string): boolean {
+  const words = (filter ?? "").split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+  return !words.length || words.some((w) => title.toLowerCase().includes(w));
+}
 
 type SyncResult =
   | { ok: true; imported: number; removed: number; changes: ChangeRow[] }
@@ -170,7 +179,10 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
 
   // A feed can list the same event twice, which would fail the whole import; keep the first
   const byUid = new Map<string, IcsEvent>();
-  for (const e of parsed) if (!byUid.has(e.uid)) byUid.set(e.uid, e);
+  for (const e of parsed) {
+    // Only this team's events when its calendar mixes several kids or sports
+    if (!byUid.has(e.uid) && matchesFilter(team.event_filter, e.summary || "Team event")) byUid.set(e.uid, e);
+  }
   const rows = [...byUid.values()].map((e) => ({
     household_id: team.household_id,
     team_id: team.id,
@@ -231,6 +243,8 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
   // imported events the feed no longer contains (cancellations)
   const keep = new Set(rows.map((r) => r.external_uid));
   const dupes = new Set(duplicateIds(all, rows));
+  // Events the team's filter now leaves out go quietly (they weren't cancelled)
+  for (const e of all) if (!matchesFilter(team.event_filter, e.title)) dupes.add(e.id);
   const saved = all.filter((e) => new Date(e.start).getTime() >= now && !dupes.has(e.id));
   const stale = [...dupes, ...saved.filter((e) => !keep.has(e.external_uid)).map((e) => e.id)];
   for (let i = 0; i < stale.length; i += 200) {

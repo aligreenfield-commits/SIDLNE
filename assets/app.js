@@ -714,7 +714,7 @@ function teamsHTML() {
   const teams = state.teams.length
     ? `<div class="teams">${state.teams.map((t) => {
       const a = byId(state.athletes, t.athlete_id);
-      return `<div class="team-card"><div class="team-icon">${SPORT_ICONS[t.sport] || '🏅'}</div><h2>${esc(t.name)}</h2><p>${esc([a?.name, t.sport].filter(Boolean).join(' · ') || 'No athlete assigned')}</p>
+      return `<div class="team-card"><div class="team-icon">${SPORT_ICONS[t.sport] || '🏅'}</div><h2>${esc(t.name)}</h2><p>${esc([a?.name, t.sport].filter(Boolean).join(' · ') || 'No athlete assigned')}</p>${t.event_filter ? `<p class="meta">Only events with: ${esc(t.event_filter)}</p>` : ''}
         <p class="meta">${t.calendar_url ? (t.last_sync_error ? `<span class="sync-err">● Sync problem</span> · ${esc(t.last_sync_error)}` : t.last_synced_at ? `<span class="sync-ok">● ${calendarSource(t.calendar_url) ? `Synced from ${esc(calendarSource(t.calendar_url))}` : 'Calendar linked'}</span> · ${esc(fmtDate(t.last_synced_at))} ${esc(fmtTime(t.last_synced_at))}` : `<span class="sync-ok">● ${calendarSource(t.calendar_url) ? `Linked to ${esc(calendarSource(t.calendar_url))}` : 'Calendar linked'}</span> · not synced yet`) : 'No calendar link · add events by hand'}</p>
         <div class="row-actions">${t.calendar_url ? `<button class="outline" data-action="sync-team" data-id="${t.id}">Sync now</button>` : ''}<button class="outline" data-action="edit-team" data-id="${t.id}">Edit</button>${a ? `<button class="link-btn" data-action="filter-athlete" data-id="${a.id}">View lineup</button>` : ''}</div></div>`;
     }).join('')}</div>`
@@ -739,6 +739,7 @@ function teamForm(t) {
     <div class="form-grid"><label>Athlete<select name="athlete_id"><option value="">—</option>${state.athletes.map((a) => `<option value="${a.id}" ${t?.athlete_id === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
     <label>Sport<select name="sport"><option value="">—</option>${SPORTS.map((s) => `<option ${t?.sport === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
     <label>Calendar link (optional)<input name="calendar_url" type="text" inputmode="url" value="${esc(t?.calendar_url)}" placeholder="webcal://… or https://….ics"><small class="hint">We’ll import the schedule and keep it up to date automatically.</small></label>
+    <label>Only events containing (optional)<input name="event_filter" maxlength="120" value="${esc(t?.event_filter)}" placeholder="e.g. Rostered Players, U12"><small class="hint">For a club calendar that mixes kids or sports (Crossbar, SportsEngine…): only events whose name contains one of these words go on this team. Separate words with commas.</small></label>
     <button class="primary full" type="submit">${t ? 'Save team' : 'Add team'}</button></form>
     ${t ? `<div class="row-actions"><button class="danger-btn" data-action="delete-team" data-id="${t.id}">Delete team and its imported events</button></div>` : ''}`);
 }
@@ -1810,9 +1811,17 @@ const forms = {
       athlete_id: athlete?.id || null,
       athlete_name: athlete?.name || null,
       calendar_url: f.get('calendar_url').trim() || null,
+      event_filter: (f.get('event_filter') || '').trim() || null,
     };
     const id = form.dataset.id;
     const existing = id && byId(state.teams, id);
+    // The same calendar link twice, with no filter on either, would show every event twice
+    const sameLink = (u) => String(u || '').trim().replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+    const twin = values.calendar_url && state.teams.find((t) => t.id !== id && sameLink(t.calendar_url) === sameLink(values.calendar_url));
+    if (twin && !values.event_filter && !twin.event_filter) {
+      throw new Error(`That calendar is already connected as “${twin.name}”. To split one calendar between kids or sports, fill in “Only events containing” on each team.`);
+    }
+    const changedFilter = existing && (existing.event_filter || null) !== values.event_filter;
     const team = id
       ? must(await supabase.from('teams').update(values).eq('id', id).select().single())
       : must(await supabase.from('teams').insert({ ...values, household_id: state.household.id }).select().single());
@@ -1822,7 +1831,7 @@ const forms = {
     await reload('teams', 'events');
     closeModal();
     renderMain();
-    if (team.calendar_url && team.calendar_url !== existing?.calendar_url) {
+    if (team.calendar_url && (team.calendar_url !== existing?.calendar_url || changedFilter)) {
       toast('Importing team calendar…');
       try { await syncTeam(team.id); } catch (err) { toast(`Calendar import failed: ${friendlyError(err)}`); }
     }
