@@ -82,6 +82,13 @@ state = ->(v) { v.dig("attributes", "appVersionState") || v.dig("attributes", "a
 if ENV["STATUS_ONLY"] == "true"
   # Read-only: report where each version stands and change nothing
   versions.each { |v| puts "::notice::Version #{v.dig("attributes", "versionString")}: #{state[v].tr("_", " ").downcase}" }
+  # Review submissions: when each was sent and where it stands
+  (api(:get, "/v1/reviewSubmissions?filter[app]=#{app_id}&limit=10")["data"] rescue []).each do |sub|
+    at = sub["attributes"] || {}
+    puts "::notice::Review submission: #{at["state"]} (submitted #{at["submittedDate"] || "-"}, platform #{at["platform"]})"
+  end
+  # Agreements or account holds show up as an inactive/blocked app record
+  puts "::notice::App record: #{app.dig("attributes", "name")}, primary locale #{app.dig("attributes", "primaryLocale")}"
   live = versions.find { |v| %w[READY_FOR_SALE READY_FOR_DISTRIBUTION].include?(state[v]) }
   puts "::notice::LIVE on the App Store: https://apps.apple.com/app/id#{app_id}" if live
   exit 0
