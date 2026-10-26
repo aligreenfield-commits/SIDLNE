@@ -20,7 +20,7 @@ ROOT = File.expand_path("../..", __dir__)
 LISTING = JSON.parse(File.read(File.join(ROOT, "appstore/listing.json")))
 SHOTS = Dir[File.join(ROOT, "appstore/screenshots/*.png")].sort
 SHOT_TYPE = "APP_IPHONE_67" # 6.9" and 6.7" iPhones (1320 x 2868)
-EDITABLE = %w[PREPARE_FOR_SUBMISSION DEVELOPER_REJECTED REJECTED METADATA_REJECTED INVALID_BINARY].freeze
+EDITABLE = %w[PREPARE_FOR_SUBMISSION READY_FOR_REVIEW DEVELOPER_REJECTED REJECTED METADATA_REJECTED INVALID_BINARY].freeze
 
 API_BASE = ENV.fetch("ASC_API_BASE", "https://api.appstoreconnect.apple.com")
 KEY = OpenSSL::PKey::EC.new(File.read(key_path))
