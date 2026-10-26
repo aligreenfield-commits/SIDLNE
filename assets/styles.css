@@ -135,6 +135,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px soli
 .message .avatar{height:30px;width:30px;background:#e6ecdd;color:var(--ink)}
 .bubble{background:#f2f5ed;border-radius:0 9px 9px 9px;padding:10px 13px;font-size:13px}
 .bubble small{display:block;color:var(--muted);font-size:9px;margin-bottom:4px}
+.msg-more{margin-left:8px;padding:0 6px;font-size:14px;line-height:1;color:var(--muted);background:none;border:0;cursor:pointer;vertical-align:middle}
 .compose{display:flex;gap:8px;border-top:1px solid var(--line);padding-top:14px}
 .compose input{flex:1;border:1px solid #d7ded0;border-radius:8px;padding:11px 12px;background:#fafbf8;min-width:0}
 .apps{padding:24px}
@@ -288,7 +289,7 @@ footer{padding-bottom:10px}
 .message.mine .bubble{background:#e7f5c9;border-radius:9px 0 9px 9px}
 .message-list{overflow-y:auto;max-height:60vh}
 .messages .empty{padding:30px 10px}
-.bubble{white-space:pre-wrap;word-break:break-word;max-width:520px}
+.bubble{white-space:pre-wrap;word-break:break-word;max-width:520px;min-width:0}
 .checklist{list-style:none;padding:0;margin:8px 0 0}
 .checklist li{display:flex;gap:10px;align-items:center;padding:9px 0;font-size:14px;border-bottom:1px solid #eff1eb}
 .checklist li:last-child{border-bottom:0}
