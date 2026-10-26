@@ -3,7 +3,7 @@
 // needed for native builds.
 import { cpSync, mkdirSync, rmSync } from 'node:fs';
 
-const files = ['index.html', 'config.js', 'manifest.webmanifest', 'install.html', 'privacy.html', 'support.html', 'assets', 'icons', 'welcome'];
+const files = ['index.html', 'config.js', 'manifest.webmanifest', 'install.html', 'privacy.html', 'support.html', 'terms.html', 'assets', 'icons', 'welcome'];
 rmSync('www', { recursive: true, force: true });
 mkdirSync('www');
 for (const f of files) cpSync(f, `www/${f}`, { recursive: true });

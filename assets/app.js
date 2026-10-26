@@ -32,6 +32,8 @@ const state = {
   events: [],
   rides: [],
   messages: [],
+  blocked: new Set(),
+  reported: new Set(),
   attendance: [],
   changes: [],
   carpools: [],
@@ -69,7 +71,7 @@ const TITLES = {
   Teams: ['One crew. Many teams.', 'Athletes, teams and where their schedules come from.'],
   Apps: ['Bring it all together.', 'Every team app, synced into one family calendar.'],
   Rides: ['Who’s got the ride?', 'Claim a drive, or set up a carpool with other families.'],
-  Chat: ['Keep the crew in the loop.', 'Messages are shared with everyone in your family.'],
+  Chat: ['Keep the crew in the loop.', 'Messages are shared with everyone in your family. Tap ⋯ on a message to report it or block someone.'],
   Family: ['Your family, your rules.', 'Invite people, manage members and your account.'],
 };
 
@@ -197,6 +199,7 @@ async function loadHouseholdData() {
   state.messages = must(messages).reverse();
   state.attendance = await fetchAttendance(hid, since);
   state.changes = await fetchChanges(hid);
+  await loadChatSafety();
   await loadCarpools();
   state.playlists = await fetchPlaylists(hid);
   scheduleReminders();
@@ -346,7 +349,7 @@ function renderAuth() {
       <form class="form" data-form="signin"><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required minlength="8"></label><button class="primary full" type="submit">Sign in</button></form>
       <div class="auth-links"><button data-action="auth-mode" data-mode="signup">Create an account</button><button data-action="auth-mode" data-mode="forgot">Forgot password?</button></div>`,
     signup: `<span class="eyebrow">GET STARTED</span><h2>Create your account</h2><p>Free for families. Takes under a minute.</p>
-      <form class="form" data-form="signup"><label>Your name<input name="name" autocomplete="name" required maxlength="60"></label><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8"><small class="hint">At least 8 characters.</small></label><button class="primary full" type="submit">Create account</button></form>
+      <form class="form" data-form="signup"><label>Your name<input name="name" autocomplete="name" required maxlength="60"></label><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="new-password" required minlength="8"><small class="hint">At least 8 characters.</small></label><button class="primary full" type="submit">Create account</button><small class="hint">By creating an account you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Use</a>: no objectionable content or abusive behavior.</small></form>
       <div class="auth-links"><button data-action="auth-mode" data-mode="signin">I already have an account</button></div>`,
     forgot: `<span class="eyebrow">RESET PASSWORD</span><h2>Forgot your password?</h2><p>We’ll email you a link to set a new one.</p>
       <form class="form" data-form="forgot"><label>Email<input name="email" type="email" autocomplete="email" required></label><button class="primary full" type="submit">Send reset link</button></form>
@@ -354,7 +357,7 @@ function renderAuth() {
     reset: `<span class="eyebrow">RESET PASSWORD</span><h2>Choose a new password</h2>
       <form class="form" data-form="reset"><label>New password<input name="password" type="password" autocomplete="new-password" required minlength="8"></label><button class="primary full" type="submit">Save password</button></form>`,
   };
-  root.innerHTML = `<div class="auth-wrap">${authHero()}<div class="auth-card">${forms[mode]}<div class="auth-foot"><a href="welcome/">About SIDLNE</a> · <a href="privacy.html">Privacy</a> · <a href="support.html">Support</a> · <a href="install.html">Install on your phone</a></div></div></div>`;
+  root.innerHTML = `<div class="auth-wrap">${authHero()}<div class="auth-card">${forms[mode]}<div class="auth-foot"><a href="welcome/">About SIDLNE</a> · <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="support.html">Support</a> · <a href="install.html">Install on your phone</a></div></div></div>`;
 }
 
 function renderOnboarding() {
@@ -1324,19 +1327,53 @@ function playlistForm(athleteId = '') {
 // Chat
 // ---------------------------------------------------------------------------
 function chatHTML() {
-  return `<div class="chat" style="grid-template-columns:1fr"><div class="messages"><h2>${esc(state.household.name)}</h2><div class="message-list" id="messageList">${messagesHTML()}</div>
+  return `<div class="chat" style="grid-template-columns:minmax(0,1fr)"><div class="messages"><h2>${esc(state.household.name)}</h2><div class="message-list" id="messageList">${messagesHTML()}</div>
     <form class="compose" data-form="message"><input name="body" placeholder="Message your family…" aria-label="Message" maxlength="2000" autocomplete="off" required><button class="primary" type="submit">Send</button></form></div></div>`;
+}
+
+function visibleMessages() {
+  return state.messages.filter((m) => !state.blocked.has(m.sender_id) && !state.reported.has(m.id));
 }
 
 function messagesHTML() {
   const me = state.session.user.id;
-  if (!state.messages.length) return '<div class="empty"><h3>No messages yet.</h3><p>Say hi to get the conversation started.</p></div>';
-  return state.messages.map((m) => {
+  const list = visibleMessages();
+  if (!list.length) return '<div class="empty"><h3>No messages yet.</h3><p>Say hi to get the conversation started.</p></div>';
+  return list.map((m) => {
     const name = memberName(m.sender_id);
     const when = new Date(m.inserted_at);
     const stamp = key(when) === key(new Date()) ? fmtTime(when) : `${fmtDate(when)} · ${fmtTime(when)}`;
-    return `<div class="message ${m.sender_id === me ? 'mine' : ''}"><span class="avatar">${initials(name)}</span><div class="bubble"><small>${esc(name)} · ${esc(stamp)}</small>${esc(m.body)}</div></div>`;
+    return `<div class="message ${m.sender_id === me ? 'mine' : ''}"><span class="avatar">${initials(name)}</span><div class="bubble"><small>${esc(name)} · ${esc(stamp)}<button class="msg-more" data-action="message-menu" data-id="${m.id}" aria-label="Message options: report, block or delete">⋯</button></small>${esc(m.body)}</div></div>`;
   }).join('');
+}
+
+// Chat safety: report a message, block a person, delete a message
+async function loadChatSafety() {
+  const me = state.session.user.id;
+  const [blocked, reports] = await Promise.all([
+    supabase.from('blocked_users').select('blocked_id').eq('blocker_id', me),
+    supabase.from('message_reports').select('message_id').eq('reporter_id', me),
+  ]);
+  if (blocked.error || reports.error) console.warn('Chat safety unavailable:', (blocked.error || reports.error).message);
+  state.blocked = new Set((blocked.data || []).map((b) => b.blocked_id));
+  state.reported = new Set((reports.data || []).map((r) => r.message_id).filter(Boolean));
+}
+
+// A short list of slurs and obscenities that can't be posted in family chat
+const BLOCKED_WORDS = ['fuck', 'shit', 'bitch', 'cunt', 'asshole', 'motherfucker', 'nigger', 'nigga', 'faggot', 'retard', 'whore', 'slut'];
+function isObjectionable(text) {
+  const words = text.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/);
+  return words.some((w) => BLOCKED_WORDS.some((b) => w === b || w === `${b}s` || w === `${b}ing` || w === `${b}ed`));
+}
+
+function messageMenuHTML(m) {
+  const me = state.session.user.id;
+  const mine = m.sender_id === me;
+  const admin = ['owner', 'admin'].includes(state.role);
+  const name = memberName(m.sender_id);
+  return `<span class="eyebrow">MESSAGE</span><h2>${mine ? 'Your message' : `From ${esc(name)}`}</h2><p class="subtitle">${esc(m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body)}</p>
+    ${mine ? '' : `<form class="form" data-form="report"><input type="hidden" name="id" value="${m.id}"><label>Report this message<textarea name="reason" maxlength="500" placeholder="What’s wrong with it? (optional)"></textarea></label><small class="hint">Reports go to the SIDLNE team and are reviewed within 24 hours. The message is hidden for you right away.</small><button class="primary full" type="submit">Report message</button></form>`}
+    <div class="row-actions">${!mine && m.sender_id ? `<button class="danger-btn" data-action="block-user" data-id="${m.sender_id}">Block ${esc(name)}</button>` : ''}${mine || admin ? `<button class="danger-btn" data-action="delete-message" data-id="${m.id}">Delete message</button>` : ''}</div>`;
 }
 
 function renderMessages() {
@@ -1554,6 +1591,7 @@ function familyHTML() {
     ${NATIVE && Plugins.Preferences ? `<div class="rail-card siri-card"><h2>Hey Siri</h2><p>Ask Siri, hands-free in the car:</p><ul class="siri-list"><li>“What’s next on SIDLNE?”</li><li>“Who’s driving on SIDLNE?”</li><li>“What’s on this week in SIDLNE?”</li><li>“Play the Game Day mix on SIDLNE”</li><li>“Take me to the game with SIDLNE”</li></ul><p class="hint">They also appear in the Shortcuts app, so you can add them to CarPlay or your Home Screen.</p></div>` : ''}
     ${NATIVE && Plugins.PushNotifications ? `<div class="rail-card"><h2>Schedule-change alerts</h2><p>${state.pushStatus === 'granted' ? 'On. This phone gets a notification when a game or practice moves, changes fields, is cancelled or is added.' : 'Get a notification on this phone when a game or practice moves, changes fields, is cancelled or is added.'}</p>${state.pushStatus === 'granted' ? '<span class="pill ok">NOTIFICATIONS ON</span>' : '<button class="primary" data-action="enable-push">🔔 Turn on notifications</button>'}</div>` : ''}
     ${NATIVE && Plugins.LocalNotifications ? `<div class="rail-card"><h2>Game reminders</h2><p>Get a notification 1 hour before every practice and game on this phone.</p><button class="${remindersOn() ? 'outline' : 'primary'}" data-action="toggle-reminders">${remindersOn() ? 'Turn off reminders' : '🔔 Turn on reminders'}</button></div>` : ''}
+    ${state.blocked.size ? `<div class="rail-card"><h2>Blocked</h2><p>You don’t see messages from these people.</p>${[...state.blocked].map((id) => `<div class="list-row"><span class="grow"><strong>${esc(memberName(id))}</strong></span><button class="outline" data-action="unblock-user" data-id="${id}">Unblock</button></div>`).join('')}</div>` : ''}
     <div class="rail-card"><h2>Account</h2><p>Permanently delete your account and personal data. Families you own are deleted too.</p><button class="danger-btn" data-action="delete-account">Delete my account</button></div>
   </aside></div>`;
 }
@@ -1673,6 +1711,24 @@ const actions = {
   'rotate-code': async () => {
     if (!confirm('Reset the invite code? The old code and link will stop working.')) return;
     await busy(null, async () => { state.household.invite_code = must(await supabase.rpc('rotate_invite_code', { hid: state.household.id })); renderMain(); toast('New invite code ready'); });
+  },
+  'message-menu': (el) => { const m = byId(state.messages, el.dataset.id); if (m) showModal(messageMenuHTML(m)); },
+  'block-user': async (el) => {
+    if (!confirm(`Block ${memberName(el.dataset.id)}? You won’t see their messages. You can unblock them under Family.`)) return;
+    await busy(null, async () => {
+      must(await supabase.from('blocked_users').upsert({ blocker_id: state.session.user.id, blocked_id: el.dataset.id }));
+      state.blocked.add(el.dataset.id);
+      closeModal(); renderMessages(); toast('Blocked. You won’t see their messages.');
+    });
+  },
+  'unblock-user': (el) => busy(null, async () => {
+    must(await supabase.from('blocked_users').delete().eq('blocker_id', state.session.user.id).eq('blocked_id', el.dataset.id));
+    state.blocked.delete(el.dataset.id);
+    renderMain(); toast('Unblocked');
+  }),
+  'delete-message': async (el) => {
+    if (!confirm('Delete this message for everyone?')) return;
+    await busy(null, async () => { must(await supabase.from('messages').delete().eq('id', el.dataset.id)); await reload('messages'); closeModal(); renderMessages(); toast('Message deleted'); });
   },
   'remove-member': async (el) => {
     if (!confirm('Remove this person from your family?')) return;
@@ -1868,11 +1924,19 @@ const forms = {
   message: async (f, form) => {
     const body = f.get('body').trim();
     if (!body) return;
+    if (isObjectionable(body)) { toast('That message has language that isn’t allowed in family chat.'); return; }
     form.reset();
     must(await supabase.from('messages').insert({ household_id: state.household.id, sender_id: state.session.user.id, body }));
     await reload('messages');
     renderMessages();
     form.querySelector('input').focus();
+  },
+  report: async (f) => {
+    const m = byId(state.messages, f.get('id'));
+    if (!m) return;
+    must(await supabase.from('message_reports').insert({ message_id: m.id, household_id: state.household.id, reporter_id: state.session.user.id, sender_id: m.sender_id, body: m.body, reason: f.get('reason').trim() || null }));
+    state.reported.add(m.id);
+    closeModal(); renderMessages(); toast('Thanks. The SIDLNE team will review it within 24 hours.');
   },
   profile: async (f) => {
     state.profile = must(await supabase.from('profiles').update({ display_name: f.get('display_name').trim() }).eq('id', state.session.user.id).select().single());
