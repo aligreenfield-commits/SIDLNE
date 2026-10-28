@@ -662,9 +662,11 @@ const CALENDAR_SOURCES = [
   [/outlook|office365|live\.com/, 'Outlook'],
 ];
 function calendarSource(url) {
-  let host = '';
-  try { host = new URL(String(url).trim().replace(/^webcals?:\/\//i, 'https://')).hostname.toLowerCase(); } catch { return null; }
-  return CALENDAR_SOURCES.find(([re]) => re.test(host))?.[1] || null;
+  let u;
+  try { u = new URL(String(url).trim().replace(/^webcals?:\/\//i, 'https://')); } catch { return null; }
+  const host = u.hostname.toLowerCase();
+  // Crossbar clubs use their own domains (e.g. wiltonhoops.org) with Crossbar's /calendar/ical/<id> links
+  return CALENDAR_SOURCES.find(([re]) => re.test(host))?.[1] || (/^\/calendar\/ical\/\d+/i.test(u.pathname) ? 'Crossbar' : null);
 }
 
 const APP_ABBR = { TeamSnap: 'TS', SportsEngine: 'SE', LeagueApps: 'LA', GameChanger: 'GC', 'Sports Connect': 'SC', Crossbar: 'CB', PlayMetrics: 'PM', Spond: 'SP', Heja: 'HJ', TeamLinkt: 'TL', Demosphere: 'DS', BYGA: 'BY', 'Team App': 'TA', 'Google Calendar': 'GO', 'Apple Calendar': 'AP', Outlook: 'OL' };
