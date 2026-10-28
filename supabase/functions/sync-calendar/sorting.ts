@@ -24,8 +24,15 @@ export function linkKey(url: string | null | undefined): string {
 // Words separated by commas; matches when the title contains any of them
 // (an empty filter matches everything)
 export function matchesFilter(filter: string | null | undefined, title: string): boolean {
-  const words = (filter ?? "").split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
-  return !words.length || words.some((w) => title.toLowerCase().includes(w));
+  const words = (filter ?? "").split(",").map(loose).filter(Boolean);
+  const t = ` ${loose(title)} `;
+  return !words.length || words.some((w) => t.includes(w));
+}
+
+// Lowercase letters and digits only, so odd spacing or punctuation in a team app's
+// event names ("Rostered\u00a0Players", "7G-Blue") still matches the family's words
+function loose(text: string): string {
+  return (text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 // Whether an event from the shared link goes on `team`. In order: a name the
