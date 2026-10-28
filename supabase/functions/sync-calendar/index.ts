@@ -11,6 +11,9 @@
 //
 // Carpool import: reads a shared Google Sheet as CSV for a signed-in user.
 //   POST { "sheet_url": "https://docs.google.com/spreadsheets/d/…" }  ->  { "csv": "…" }
+//
+// Sorting a shared calendar: lists the event names in a link for a signed-in user.
+//   POST { "preview_url": "webcal://…" }  ->  { "names": [{ pattern, title, count, next }] }
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { type IcsEvent, parseIcs } from "./ics.ts";
@@ -18,6 +21,7 @@ import { detectChanges, duplicateIds, rematchEvents, type SavedEvent } from "./c
 import { changeMessage, type ChangeRow } from "./notify.ts";
 import { apnsConfigured, sendPush } from "./apns.ts";
 import { fetchSheetCsv } from "./sheets.ts";
+import { belongsTo, linkKey, normTitle, unsortedTitles } from "./sorting.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -43,16 +47,12 @@ type Team = {
   calendar_url: string | null;
   last_synced_at: string | null;
   event_filter?: string | null;
+  event_titles?: string[] | null;
+  hidden_titles?: string[] | null;
+  unsorted_titles?: string[] | null;
 };
 // "*" so the function keeps working before and after a migration adds a column
 const TEAM_COLUMNS = "*";
-
-// A team's event filter: words separated by commas; an event matches when its
-// title contains any of them (an empty filter matches everything)
-function matchesFilter(filter: string | null | undefined, title: string): boolean {
-  const words = (filter ?? "").split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
-  return !words.length || words.some((w) => title.toLowerCase().includes(w));
-}
 
 type SyncResult =
   | { ok: true; imported: number; removed: number; changes: ChangeRow[] }
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  let body: { team_id?: string; sheet_url?: string } = {};
+  let body: { team_id?: string; sheet_url?: string; preview_url?: string } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
@@ -95,6 +95,12 @@ Deno.serve(async (req) => {
   if (body.sheet_url) {
     const sheet = await fetchSheetCsv(body.sheet_url);
     return "csv" in sheet ? json(sheet) : json({ error: sheet.error }, sheet.status);
+  }
+
+  if (body.preview_url) {
+    const feed = await loadFeed(body.preview_url);
+    if ("error" in feed) return json({ error: feed.error }, feed.status);
+    return json({ names: eventNames(feed.events) });
   }
 
   const teamId = body.team_id;
@@ -142,46 +148,26 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
     return { ok: false, error, status };
   };
 
-  let url: URL;
-  try {
-    url = new URL(team.calendar_url.trim().replace(/^webcals?:\/\//i, "https://"));
-  } catch {
-    return fail("The calendar link is not a valid URL", 400);
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    return fail("Calendar links must start with https:// or webcal://", 400);
-  }
-
-  let text: string;
-  try {
-    const res = await fetch(url, {
-      headers: { Accept: "text/calendar, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; SIDLNE calendar sync; +https://sidlne.app)" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) return fail(`The calendar server answered ${res.status}`, 502);
-    text = await res.text();
-  } catch (err) {
-    return fail(`Could not download the calendar: ${(err as Error).message}`, 502);
-  }
-  if (text.length > MAX_FEED_BYTES) return fail("That calendar is too large to import", 413);
-  if (!text.includes("BEGIN:VCALENDAR")) return fail("That link did not return an iCal calendar", 422);
-
+  const feed = await loadFeed(team.calendar_url);
+  if ("error" in feed) return fail(feed.error, feed.status);
+  const parsed = feed.events;
   const now = Date.now();
   const from = now - PAST_DAYS * 864e5;
-  const to = now + FUTURE_DAYS * 864e5;
-  let parsed: IcsEvent[];
-  try {
-    parsed = parseIcs(text).filter((e) => e.start.getTime() >= from && e.start.getTime() <= to);
-  } catch (err) {
-    return fail(`Could not read that calendar: ${(err as Error).message}`, 422);
-  }
+
+  // Other teams of the family on the same link (a club calendar shared between
+  // kids or sports): the event names the family sorted decide which team gets what
+  const { data: family } = await supabase.from("teams").select(TEAM_COLUMNS)
+    .eq("household_id", team.household_id).not("calendar_url", "is", null);
+  const siblings = ((family ?? []) as Team[]).filter((s) => linkKey(s.calendar_url) === linkKey(team.calendar_url));
+  const me = siblings.find((s) => s.id === team.id) ?? team;
+  if (!siblings.includes(me)) siblings.push(me);
+  const mine = (title: string) => belongsTo(me, siblings, title);
 
   // A feed can list the same event twice, which would fail the whole import; keep the first
   const byUid = new Map<string, IcsEvent>();
   for (const e of parsed) {
     // Only this team's events when its calendar mixes several kids or sports
-    if (!byUid.has(e.uid) && matchesFilter(team.event_filter, e.summary || "Team event")) byUid.set(e.uid, e);
+    if (!byUid.has(e.uid) && mine(e.summary || "Team event")) byUid.set(e.uid, e);
   }
   const rows = [...byUid.values()].map((e) => ({
     household_id: team.household_id,
@@ -243,8 +229,8 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
   // imported events the feed no longer contains (cancellations)
   const keep = new Set(rows.map((r) => r.external_uid));
   const dupes = new Set(duplicateIds(all, rows));
-  // Events the team's filter now leaves out go quietly (they weren't cancelled)
-  for (const e of all) if (!matchesFilter(team.event_filter, e.title)) dupes.add(e.id);
+  // Events now sorted to another team (or hidden) go quietly (they weren't cancelled)
+  for (const e of all) if (!mine(e.title)) dupes.add(e.id);
   const saved = all.filter((e) => new Date(e.start).getTime() >= now && !dupes.has(e.id));
   const stale = [...dupes, ...saved.filter((e) => !keep.has(e.external_uid)).map((e) => e.id)];
   for (let i = 0; i < stale.length; i += 200) {
@@ -280,7 +266,77 @@ async function syncTeam(supabase: SupabaseClient, team: Team, actorId: string | 
 
   await supabase.from("teams").update({ last_synced_at: new Date().toISOString(), last_sync_error: null }).eq("id", team.id);
 
+  // Upcoming event names no team on the link takes, so the app can ask the family
+  // to sort them instead of dropping them without a word
+  if (siblings.length > 1 || me.event_titles?.length || (me.event_filter ?? "").trim()) {
+    const unsorted = unsortedTitles(siblings, parsed.filter((e) => e.start.getTime() >= now).map((e) => e.summary || "Team event"));
+    const before = [...(me.unsorted_titles ?? [])].sort().join("\n");
+    if (unsorted.slice().sort().join("\n") !== before) {
+      await supabase.from("teams").update({ unsorted_titles: unsorted }).in("id", siblings.map((s) => s.id));
+    }
+  } else if (me.unsorted_titles?.length) {
+    await supabase.from("teams").update({ unsorted_titles: [] }).eq("id", team.id);
+  }
+
   return { ok: true, imported: rows.length, removed: stale.length, changes: recorded };
+}
+
+// Downloads and reads an iCal link, keeping events inside the import window
+async function loadFeed(link: string): Promise<{ events: IcsEvent[] } | { error: string; status: number }> {
+  let url: URL;
+  try {
+    url = new URL(link.trim().replace(/^webcals?:\/\//i, "https://"));
+  } catch {
+    return { error: "The calendar link is not a valid URL", status: 400 };
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    return { error: "Calendar links must start with https:// or webcal://", status: 400 };
+  }
+
+  let text: string;
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "text/calendar, text/plain, */*", "User-Agent": "Mozilla/5.0 (compatible; SIDLNE calendar sync; +https://sidlne.app)" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return { error: `The calendar server answered ${res.status}`, status: 502 };
+    text = await res.text();
+  } catch (err) {
+    return { error: `Could not download the calendar: ${(err as Error).message}`, status: 502 };
+  }
+  if (text.length > MAX_FEED_BYTES) return { error: "That calendar is too large to import", status: 413 };
+  if (!text.includes("BEGIN:VCALENDAR")) return { error: "That link did not return an iCal calendar", status: 422 };
+
+  const now = Date.now();
+  const from = now - PAST_DAYS * 864e5;
+  const to = now + FUTURE_DAYS * 864e5;
+  try {
+    return { events: parseIcs(text).filter((e) => e.start.getTime() >= from && e.start.getTime() <= to) };
+  } catch (err) {
+    return { error: `Could not read that calendar: ${(err as Error).message}`, status: 422 };
+  }
+}
+
+// The distinct event names in a feed, soonest first, for the app's sorting screen
+function eventNames(events: IcsEvent[]) {
+  const now = Date.now();
+  const names = new Map<string, { pattern: string; title: string; count: number; next: string | null; last: number }>();
+  for (const e of events) {
+    const title = (e.summary || "Team event").slice(0, 200);
+    const pattern = normTitle(title);
+    if (!pattern) continue;
+    const n = names.get(pattern) ?? { pattern, title, count: 0, next: null, last: 0 };
+    n.count++;
+    const t = e.start.getTime();
+    if (t >= now && (!n.next || t < Date.parse(n.next))) { n.next = e.start.toISOString(); n.title = title; }
+    n.last = Math.max(n.last, t);
+    names.set(pattern, n);
+  }
+  return [...names.values()]
+    .sort((a, b) => (a.next ? Date.parse(a.next) : Infinity) - (b.next ? Date.parse(b.next) : Infinity) || b.last - a.last)
+    .slice(0, 300)
+    .map(({ last: _last, ...n }) => n);
 }
 
 // Push the changes to every phone in the family

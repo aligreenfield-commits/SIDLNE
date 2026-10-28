@@ -398,3 +398,79 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .hero-card .ghost{position:absolute;right:-8px;bottom:-60px;font-weight:950;font-style:italic;font-size:190px;letter-spacing:-14px;color:#ffffff07;pointer-events:none}
 .hero-card .primary{color:var(--ink)}
 @media(max-width:700px){.hero-card{padding:22px 20px}.hero-card h2{font-size:33px;letter-spacing:-1.5px}.hero-card .ghost{font-size:140px}.mobile-nav button{font-size:8.5px}}
+/* Shared calendars: one link sorted between kids and sports */
+.link-card{grid-column:1/-1}
+.link-head{display:flex;align-items:center;gap:12px}
+.link-head h2{margin:0 0 2px}
+.link-head p{margin:0}
+.split-list{margin:14px 0 4px;border-top:1px solid var(--line)}
+.split-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.split-row .grow{display:flex;flex-direction:column;min-width:0}
+.split-row .sub{font-size:12px;color:var(--muted)}
+.split-icon{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--kid) 22%,#fff);box-shadow:inset 0 0 0 2px var(--kid);flex:none}
+.sort-alert{display:inline-flex;align-items:center;gap:6px;margin:10px 0 0;padding:6px 10px;border-radius:999px;background:#fdf3ef;color:#b4472f;font-size:12px;font-weight:800}
+.sort-alert.static{margin:6px 0 10px}
+.sort-ok{color:var(--green);font-weight:800;font-size:13px;margin:6px 0 10px}
+.sort-list{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;padding-right:2px}
+.sort-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,44%);align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;margin:0}
+.sort-row.todo{border-color:#e0b4a6;background:#fffaf7}
+.sort-row.clash{border-color:#e6cf7a;background:#fffcef}
+.sort-name{display:flex;flex-direction:column;min-width:0}
+.sort-name strong{font-size:13px;overflow-wrap:anywhere}
+.sort-name small{font-size:11px;color:var(--muted);font-weight:500}
+.sort-row select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px}
+.sort-row.todo select{border-color:#e0b4a6}
+.sort-words{margin-top:12px;font-size:13px}
+.sort-words summary{cursor:pointer;font-weight:700}
+.loading-bar{height:4px;border-radius:4px;background:linear-gradient(90deg,var(--line),var(--lime),var(--line));background-size:200% 100%;animation:slide 1.2s linear infinite;margin-top:14px}
+@keyframes slide{to{background-position:-200% 0}}
+@media(max-width:700px){.sort-row{grid-template-columns:1fr}}
+
+/* Game Day: the stage, mix covers, channels and the tracklist */
+.gd-stage{position:relative;margin:30px 0 4px;padding:22px 22px 20px;border-radius:14px;background:radial-gradient(120% 140% at 100% 0,#2f3a1f 0,#171a16 60%);color:#fff;overflow:hidden}
+.gd-stage .eyebrow{color:var(--lime)}
+.gd-stage h2{margin:6px 0 6px;font-size:30px;font-weight:900;font-style:italic;letter-spacing:-1.5px;display:flex;align-items:flex-end;gap:12px}
+.gd-stage p{color:#c9cfc2;margin:0}
+.eq{display:inline-flex;align-items:flex-end;gap:3px;height:22px;margin-bottom:6px}
+.eq i{width:4px;border-radius:2px;background:var(--lime);height:30%;animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.2s}.eq i:nth-child(3){animation-delay:-.45s}.eq i:nth-child(4){animation-delay:-.7s}.eq i:nth-child(5){animation-delay:-.9s}
+@keyframes eq{0%,100%{height:25%}50%{height:100%}}
+.mix-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.mix-card{position:relative;aspect-ratio:1;border-radius:14px;overflow:hidden;--c1:#2b3226;--c2:#171a16;box-shadow:0 10px 24px #1f291822}
+.mix-card.svc-spotify{--c1:#1ed760;--c2:#0a5f2b}
+.mix-card.svc-apple{--c1:#ff4e6a;--c2:#9a0f45}
+.mix-card.svc-siriusxm{--c1:#3a3aff;--c2:#06064a}
+.mix-card.svc-youtube{--c1:#ff4545;--c2:#6e0000}
+.mix-card.svc-amazon{--c1:#25d1da;--c2:#14476e}
+.mix-cover{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:12px;color:#fff;text-decoration:none;background:linear-gradient(150deg,var(--c1),var(--c2))}
+.mix-cover::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,#ffffff0d 0 2px,transparent 2px 9px);pointer-events:none}
+.mix-tags{position:absolute;top:10px;left:10px;right:34px;display:flex;flex-direction:column;gap:4px;z-index:1}
+.mix-who{align-self:flex-start;max-width:100%;font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;background:#0000004d;padding:3px 7px;border-radius:999px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mix-svc{font-size:10px;font-weight:700;opacity:.85}
+.mix-disc{position:absolute;width:78%;aspect-ratio:1;right:-26%;top:14%;border-radius:50%;background:radial-gradient(circle,var(--c1) 0 9%,#111 9.5% 12%,#1c1c1c 12.5%,#2a2a2a 13%,#151515 20%,#262626 21%,#121212 30%,#232323 31%,#111 45%,#222 46%,#0d0d0d 70%);box-shadow:-6px 6px 18px #0006;transition:transform .6s ease}
+.mix-card:hover .mix-disc{transform:rotate(200deg)}
+.mix-title{position:relative;z-index:1;font-size:20px;line-height:1.02;font-weight:900;font-style:italic;letter-spacing:-.8px;text-shadow:0 2px 12px #0005;max-width:78%;overflow-wrap:anywhere}
+.mix-play{position:absolute;right:10px;bottom:10px;z-index:1;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--lime);color:var(--ink);font-size:13px;box-shadow:0 6px 14px #0005;transition:transform .15s}
+.mix-cover:hover .mix-play,.chan-card:hover .mix-play{transform:scale(1.1)}
+.mix-remove{position:absolute;top:8px;right:8px;z-index:2;width:26px;height:26px;border-radius:50%;background:#00000059;color:#fff;font-size:11px}
+.mix-add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:2px dashed var(--line);background:#fafbf8;box-shadow:none;color:var(--ink)}
+.mix-add span{font-size:26px;color:var(--green)}
+.mix-add small{font-size:11px;color:var(--muted)}
+.mix-add:hover{border-color:var(--green)}
+.chan-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.chan-card{position:relative;display:flex;align-items:center;gap:12px;padding:14px 54px 14px 14px;border-radius:12px;color:#fff;text-decoration:none;background:linear-gradient(140deg,#3a3aff,#06064a)}
+.chan-num{font-size:30px;font-weight:900;font-style:italic;letter-spacing:-1px}
+.chan-text{display:flex;flex-direction:column;min-width:0}
+.chan-text small{opacity:.8;font-size:11px}
+.chan-card .mix-play{top:50%;bottom:auto;transform:translateY(-50%)}
+.chan-card:hover .mix-play{transform:translateY(-50%) scale(1.1)}
+.tracklist{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.track{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:10px;background:#fff;border:1px solid var(--line);color:var(--ink);text-decoration:none;min-width:0}
+.track-no{font-weight:900;font-style:italic;color:var(--green);font-size:15px;width:22px}
+.track-text{display:flex;flex-direction:column;min-width:0;flex:1}
+.track-text strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track-text small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track i{font-style:normal;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--lime);font-size:10px;flex:none}
+.track:hover{border-color:var(--green);background:#f7fbef}
+@media(max-width:700px){.tracklist,.chan-grid{grid-template-columns:1fr}.mix-grid{grid-template-columns:1fr 1fr}.mix-title{font-size:17px}.gd-stage h2{font-size:26px}}
+@media(prefers-reduced-motion:reduce){.eq i,.loading-bar{animation:none}.eq i{height:70%}.mix-disc{transition:none}}
