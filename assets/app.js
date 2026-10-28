@@ -7,8 +7,8 @@ const config = window.SIDLNE_CONFIG || {};
 const root = document.getElementById('root');
 const DAY = 864e5;
 const COLORS = ['#9a78bf', '#6e9bc8', '#e0864e', '#4fa37a', '#d2668f', '#c9a23a', '#5aa8a8', '#8a8f3c'];
-const SPORTS = ['Baseball', 'Basketball', 'Cheer', 'Dance', 'Football', 'Gymnastics', 'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Swimming', 'Tennis', 'Track', 'Volleyball', 'Wrestling', 'Other'];
-const SPORT_ICONS = { Baseball: '⚾', Basketball: '🏀', Football: '🏈', Hockey: '🏒', Lacrosse: '🥍', Soccer: '⚽', Softball: '🥎', Swimming: '🏊', Tennis: '🎾', Volleyball: '🏐', Gymnastics: '🤸', Track: '🏃', Wrestling: '🤼', Cheer: '📣', Dance: '💃' };
+const SPORTS = ['Baseball', 'Basketball', 'Cheer', 'Dance', 'Field Hockey', 'Football', 'Gymnastics', 'Hockey', 'Lacrosse', 'Soccer', 'Softball', 'Swimming', 'Tennis', 'Track', 'Volleyball', 'Wrestling', 'Other'];
+const SPORT_ICONS = { Baseball: '⚾', Basketball: '🏀', 'Field Hockey': '🏑', Football: '🏈', Hockey: '🏒', Lacrosse: '🥍', Soccer: '⚽', Softball: '🥎', Swimming: '🏊', Tennis: '🎾', Volleyball: '🏐', Gymnastics: '🤸', Track: '🏃', Wrestling: '🤼', Cheer: '📣', Dance: '💃' };
 const HOUSEHOLD_KEY = 'sidlne-household';
 // Running inside the iPhone app (Capacitor) rather than a browser
 const NATIVE = !!window.Capacitor?.isNativePlatform?.();
@@ -714,17 +714,135 @@ function teamsHTML() {
   const athletes = state.athletes.length
     ? state.athletes.map((a) => `<button class="athlete-chip" data-action="edit-athlete" data-id="${a.id}"><i class="dot" style="background:${esc(a.color)}"></i>${esc(a.name)}</button>`).join('')
     : '<p class="subtitle">Add each kid (or adult) whose schedule you track.</p>';
+  const shared = sharedLinks();
+  const solo = state.teams.filter((t) => !shared.some((g) => g.teams.includes(t)));
+  const cards = [...shared.map(sharedLinkCard), ...solo.map(teamCard)].join('');
   const teams = state.teams.length
-    ? `<div class="teams">${state.teams.map((t) => {
-      const a = byId(state.athletes, t.athlete_id);
-      return `<div class="team-card"><div class="team-icon">${SPORT_ICONS[t.sport] || '🏅'}</div><h2>${esc(t.name)}</h2><p>${esc([a?.name, t.sport].filter(Boolean).join(' · ') || 'No athlete assigned')}</p>${t.event_filter ? `<p class="meta">Only events with: ${esc(t.event_filter)}</p>` : ''}
-        <p class="meta">${t.calendar_url ? (t.last_sync_error ? `<span class="sync-err">● Sync problem</span> · ${esc(t.last_sync_error)}` : t.last_synced_at ? `<span class="sync-ok">● ${calendarSource(t.calendar_url) ? `Synced from ${esc(calendarSource(t.calendar_url))}` : 'Calendar linked'}</span> · ${esc(fmtDate(t.last_synced_at))} ${esc(fmtTime(t.last_synced_at))}` : `<span class="sync-ok">● ${calendarSource(t.calendar_url) ? `Linked to ${esc(calendarSource(t.calendar_url))}` : 'Calendar linked'}</span> · not synced yet`) : 'No calendar link · add events by hand'}</p>
-        <div class="row-actions">${t.calendar_url ? `<button class="outline" data-action="sync-team" data-id="${t.id}">Sync now</button>` : ''}<button class="outline" data-action="edit-team" data-id="${t.id}">Edit</button>${a ? `<button class="link-btn" data-action="filter-athlete" data-id="${a.id}">View lineup</button>` : ''}</div></div>`;
-    }).join('')}</div>`
+    ? `<div class="teams">${cards}</div>`
     : '<div class="panel empty"><h3>No teams yet.</h3><p>Add a team to color-code events and import its schedule.</p></div>';
   return `<div class="section"><div class="section-head"><h2>Athletes</h2><button class="outline" data-action="add-athlete">＋ Add athlete</button></div><div class="athlete-chips">${athletes}</div></div>
     <div class="section"><div class="section-head"><h2>Teams</h2><button class="outline" data-action="add-team">＋ Add team</button></div>${teams}</div>
     <div class="rail-card"><h2>Team apps</h2><p>See which apps your teams sync from, and connect more.</p><button class="link-btn" data-action="go" data-tab="Apps">Open Apps →</button></div>`;
+}
+
+function syncLine(t) {
+  if (!t.calendar_url) return 'No calendar link · add events by hand';
+  const src = calendarSource(t.calendar_url);
+  if (t.last_sync_error) return `<span class="sync-err">● Sync problem</span> · ${esc(t.last_sync_error)}`;
+  if (t.last_synced_at) return `<span class="sync-ok">● ${src ? `Synced from ${esc(src)}` : 'Calendar linked'}</span> · ${esc(fmtDate(t.last_synced_at))} ${esc(fmtTime(t.last_synced_at))}`;
+  return `<span class="sync-ok">● ${src ? `Linked to ${esc(src)}` : 'Calendar linked'}</span> · not synced yet`;
+}
+
+function upcomingCount(teamId) {
+  const now = Date.now();
+  return state.events.filter((e) => e.team_id === teamId && new Date(e.start).getTime() >= now).length;
+}
+
+function teamCard(t) {
+  const a = byId(state.athletes, t.athlete_id);
+  const unsorted = t.unsorted_titles?.length || 0;
+  return `<div class="team-card"><div class="team-icon">${SPORT_ICONS[t.sport] || '🏅'}</div><h2>${esc(t.name)}</h2><p>${esc([a?.name, t.sport].filter(Boolean).join(' · ') || 'No athlete assigned')}</p>
+    ${unsorted ? `<button class="sort-alert" data-action="sort-calendar" data-id="${t.id}">● ${unsorted} new ${unsorted === 1 ? 'event name' : 'event names'} to sort</button>` : ''}
+    <p class="meta">${syncLine(t)}</p>
+    <div class="row-actions">${t.calendar_url ? `<button class="outline" data-action="sync-team" data-id="${t.id}">Sync now</button>` : ''}<button class="outline" data-action="edit-team" data-id="${t.id}">Edit</button>${t.calendar_url ? `<button class="link-btn" data-action="sort-calendar" data-id="${t.id}">Sort or split events</button>` : ''}${a ? `<button class="link-btn" data-action="filter-athlete" data-id="${a.id}">View lineup</button>` : ''}</div></div>`;
+}
+
+// One club calendar (Crossbar, SportsEngine...) feeding several kids or sports
+function sharedLinkCard(g) {
+  const lead = g.teams[0];
+  const host = (() => { try { return new URL(String(lead.calendar_url).trim().replace(/^webcals?:\/\//i, 'https://')).hostname.replace(/^www\./, ''); } catch { return 'Team calendar'; } })();
+  const src = calendarSource(lead.calendar_url) || host;
+  const unsorted = new Set(g.teams.flatMap((t) => t.unsorted_titles || [])).size;
+  const rows = g.teams.map((t) => {
+    const a = byId(state.athletes, t.athlete_id);
+    const n = upcomingCount(t.id);
+    return `<div class="split-row"><span class="split-icon" style="--kid:${esc(a?.color || '#9aa391')}">${SPORT_ICONS[t.sport] || '🏅'}</span><span class="grow"><strong>${esc(a?.name || 'No athlete')} · ${esc(t.sport || t.name)}</strong><span class="sub">${esc(t.name)} · ${n} upcoming</span></span><button class="link-btn" data-action="edit-team" data-id="${t.id}">Edit</button></div>`;
+  }).join('');
+  return `<div class="team-card link-card"><div class="link-head"><span class="app-logo">${esc(APP_ABBR[src] || src.slice(0, 2).toUpperCase())}</span><span class="grow"><h2>${esc(src)} calendar</h2><p>One link · ${g.teams.length} kids and sports</p></span></div>
+    ${unsorted ? `<button class="sort-alert" data-action="sort-calendar" data-id="${lead.id}">● ${unsorted} new ${unsorted === 1 ? 'event name' : 'event names'} to sort</button>` : ''}
+    <div class="split-list">${rows}</div>
+    <p class="meta">${syncLine(g.teams.find((t) => t.last_sync_error) || lead)}</p>
+    <div class="row-actions"><button class="${unsorted ? 'primary' : 'outline'}" data-action="sort-calendar" data-id="${lead.id}">Sort events</button><button class="outline" data-action="sync-link" data-id="${lead.id}">Sync now</button><button class="link-btn" data-action="add-from-link" data-id="${lead.id}">＋ Add a kid or sport</button></div></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Sorting a shared calendar between kids and sports. Mirrors
+// supabase/functions/sync-calendar/sorting.ts; keep the two in step.
+function normTitle(title) {
+  return String(title || '').toLowerCase().replace(/\d+/g, '#').replace(/[^a-z#]+/g, ' ').trim();
+}
+function linkKey(url) {
+  return String(url || '').trim().replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+}
+function filterWords(filter) {
+  return String(filter || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+}
+function belongsTo(team, siblings, title) {
+  const p = normTitle(title);
+  if (siblings.some((s) => s.hidden_titles?.includes(p))) return false;
+  const owner = siblings.find((s) => s.event_titles?.includes(p));
+  if (owner) return owner.id === team.id;
+  const words = filterWords(team.event_filter);
+  if (!team.event_titles?.length && !words.length) return siblings.length <= 1;
+  return words.some((w) => String(title).toLowerCase().includes(w));
+}
+function linkTeams(teamId) {
+  const t = byId(state.teams, teamId);
+  return t?.calendar_url ? state.teams.filter((x) => x.calendar_url && linkKey(x.calendar_url) === linkKey(t.calendar_url)) : [];
+}
+function sharedLinks() {
+  const groups = new Map();
+  for (const t of state.teams) {
+    if (!t.calendar_url) continue;
+    const k = linkKey(t.calendar_url);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  }
+  return [...groups.values()].filter((teams) => teams.length > 1).map((teams) => ({ teams }));
+}
+
+function teamLabel(t) {
+  const a = byId(state.athletes, t.athlete_id);
+  return [a?.name, t.sport && t.sport !== 'Other' ? t.sport : t.name].filter(Boolean).join(' · ') + (t.sport && t.sport !== 'Other' && t.name ? ` (${t.name})` : '');
+}
+
+async function sortCalendar(teamId) {
+  const teams = linkTeams(teamId);
+  if (!teams.length) return;
+  showModal('<span class="eyebrow">SORT EVENTS</span><h2>Reading the calendar…</h2><p class="subtitle">Looking up every event name in this link.</p><div class="loading-bar"></div>');
+  const { data, error } = await supabase.functions.invoke('sync-calendar', { body: { preview_url: teams[0].calendar_url } });
+  if (error) {
+    let msg = error.message;
+    try { msg = (await error.context.json()).error || msg; } catch {}
+    showModal(`<span class="eyebrow">SORT EVENTS</span><h2>Couldn’t read that calendar</h2><p>${esc(msg)}</p>`);
+    return;
+  }
+  state.sorting = { teamId, names: data.names || [] };
+  renderSorter();
+}
+
+function renderSorter() {
+  const { teamId, names } = state.sorting;
+  const teams = linkTeams(teamId);
+  const src = calendarSource(teams[0].calendar_url) || 'Team';
+  const rows = names.map((n, i) => {
+    const hidden = teams.some((t) => t.hidden_titles?.includes(n.pattern));
+    const owners = hidden ? [] : teams.filter((t) => belongsTo(t, teams, n.title));
+    const pick = hidden ? 'hide' : owners[0]?.id || '';
+    const when = n.next ? `next ${fmtDate(n.next)}` : 'past';
+    return { n, i, pick, unsorted: !hidden && !owners.length, clash: owners.length > 1, when };
+  }).sort((a, b) => b.unsorted - a.unsorted || b.clash - a.clash);
+  const left = rows.filter((r) => r.unsorted).length;
+  const options = (pick) => `${pick ? '' : '<option value="" selected>Choose who it’s for…</option>'}${teams.map((t) => `<option value="${t.id}" ${pick === t.id ? 'selected' : ''}>${esc(teamLabel(t))}</option>`).join('')}<option value="hide" ${pick === 'hide' ? 'selected' : ''}>Don’t show</option>`;
+  showModal(`<span class="eyebrow">SORT EVENTS · ${esc(src.toUpperCase())}</span><h2>Who’s each event for?</h2>
+    <p>This link has ${names.length} different event ${names.length === 1 ? 'name' : 'names'}. Pick a kid and sport for each one. New events with the same name will go to the same place automatically.</p>
+    ${left ? `<p class="sort-alert static">● ${left} still to sort</p>` : '<p class="sort-ok">✓ Everything has a home</p>'}
+    <form class="form sorter" data-form="sort">
+      <div class="sort-list">${rows.map((r) => `<label class="sort-row ${r.unsorted ? 'todo' : ''} ${r.clash ? 'clash' : ''}"><span class="sort-name"><strong>${esc(r.n.title)}</strong><small>${r.n.count} ${r.n.count === 1 ? 'event' : 'events'} · ${esc(r.when)}${r.clash ? ' · was on 2 teams' : ''}</small></span><select name="n${r.i}">${options(r.pick)}</select></label>`).join('')}</div>
+      <details class="sort-words"><summary>Auto-sort by word (optional)</summary><p class="hint">Also send new event names containing these words to a team, e.g. WYFH for every field hockey game. Separate words with commas.</p>
+        ${teams.map((t) => `<label>${esc(teamLabel(t))}<input name="w${t.id}" maxlength="120" value="${esc(t.event_filter || '')}" placeholder="e.g. WYFH, 7 Blue"></label>`).join('')}</details>
+      <button class="primary full" type="submit">Save and sync</button></form>
+    <div class="row-actions"><button class="link-btn" data-action="add-from-link" data-id="${teamId}">＋ Add another kid or sport from this calendar</button></div>`);
 }
 
 function athleteForm(a) {
@@ -736,13 +854,13 @@ function athleteForm(a) {
     ${a ? `<div class="row-actions"><button class="danger-btn" data-action="delete-athlete" data-id="${a.id}">Remove ${esc(a.name)}</button></div>` : ''}`);
 }
 
-function teamForm(t) {
+function teamForm(t, link) {
   showModal(`<span class="eyebrow">TEAM</span><h2>${t ? 'Edit team' : 'Add a team'}</h2>
     <form class="form" data-form="team" data-id="${t?.id || ''}"><label>Team name<input name="name" required maxlength="80" value="${esc(t?.name)}" placeholder="Northside U12 Lacrosse"></label>
     <div class="form-grid"><label>Athlete<select name="athlete_id"><option value="">—</option>${state.athletes.map((a) => `<option value="${a.id}" ${t?.athlete_id === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
     <label>Sport<select name="sport"><option value="">—</option>${SPORTS.map((s) => `<option ${t?.sport === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
-    <label>Calendar link (optional)<input name="calendar_url" type="text" inputmode="url" value="${esc(t?.calendar_url)}" placeholder="webcal://… or https://….ics"><small class="hint">We’ll import the schedule and keep it up to date automatically.</small></label>
-    <label>Only events containing (optional)<input name="event_filter" maxlength="120" value="${esc(t?.event_filter)}" placeholder="e.g. Rostered Players, U12"><small class="hint">For a club calendar that mixes kids or sports (Crossbar, SportsEngine…): only events whose name contains one of these words go on this team. Separate words with commas.</small></label>
+    <label>Calendar link (optional)<input name="calendar_url" type="text" inputmode="url" value="${esc(t?.calendar_url || link || '')}" placeholder="webcal://… or https://….ics"><small class="hint">We’ll import the schedule and keep it up to date automatically.</small></label>
+    <small class="hint">One club calendar for several kids or sports (Crossbar, SportsEngine…)? Add a team for each with the same link, then use <strong>Sort events</strong> to pick who each event is for.</small>
     <button class="primary full" type="submit">${t ? 'Save team' : 'Add team'}</button></form>
     ${t ? `<div class="row-actions"><button class="danger-btn" data-action="delete-team" data-id="${t.id}">Delete team and its imported events</button></div>` : ''}`);
 }
@@ -1298,20 +1416,28 @@ function gameDayModal(athleteId = '') {
   const athlete = athleteId && byId(state.athletes, athleteId);
   const sport = athlete && state.teams.find((t) => t.athlete_id === athlete.id && t.sport)?.sport;
   const mixes = playlistsFor(athleteId);
+  const eq = '<span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>';
   const mine = mixes.map((p) => {
     const who = p.athlete_id ? byId(state.athletes, p.athlete_id)?.name : null;
-    return `<div class="list-row mix-row"><span class="mix-icon ${esc(p.service)}">♪</span><span class="grow"><strong>${esc(p.title)}</strong><span class="sub">${esc(SERVICE_NAMES[p.service] || 'Link')}${who ? ` · ${esc(who)}’s mix` : ' · Family mix'}</span></span>${playLink(p.url, '▶ Play', 'primary')}<button class="link-btn" data-action="delete-playlist" data-id="${p.id}" data-athlete="${esc(athleteId)}" aria-label="Remove ${esc(p.title)}">✕</button></div>`;
+    const service = SERVICE_NAMES[p.service] || 'Link';
+    return `<div class="mix-card svc-${esc(p.service)}"><a class="mix-cover" href="${esc(p.url)}" target="_blank" rel="noopener" aria-label="Play ${esc(p.title)} on ${esc(service)}">
+        <span class="mix-tags"><span class="mix-who">${esc(who ? `${who}’s mix` : 'Family mix')}</span><span class="mix-svc">${esc(service)}</span></span>
+        <span class="mix-disc" aria-hidden="true"></span>
+        <strong class="mix-title">${esc(p.title)}</strong>
+        <span class="mix-play" aria-hidden="true">▶</span></a>
+      <button class="mix-remove" data-action="delete-playlist" data-id="${p.id}" data-athlete="${esc(athleteId)}" aria-label="Remove ${esc(p.title)}">✕</button></div>`;
   }).join('');
+  const addTile = `<button class="mix-card mix-add" data-action="add-playlist" data-athlete="${esc(athleteId)}"><span>＋</span><strong>${mixes.length ? 'Add a mix' : 'Add your first mix'}</strong><small>Spotify, Apple Music or SiriusXM</small></button>`;
   const picks = svc === 'siriusxm'
-    ? `<h3>Kids’ channels on SiriusXM</h3>${SXM_CHANNELS.map((c) => `<div class="list-row mix-row"><span class="mix-icon siriusxm">${c.channel}</span><span class="grow"><strong>${esc(c.name)}</strong><span class="sub">Ch. ${c.channel} · ${esc(c.about)}</span></span>${playLink(c.url, '▶ Listen')}</div>`).join('')}
+    ? `<h3>Kids’ channels on SiriusXM</h3><div class="chan-grid">${SXM_CHANNELS.map((c) => `<a class="chan-card" href="${esc(c.url)}" target="_blank" rel="noopener"><span class="chan-num">${c.channel}</span><span class="chan-text"><strong>${esc(c.name)}</strong><small>${esc(c.about)}</small></span><span class="mix-play" aria-hidden="true">▶</span></a>`).join('')}</div>
        <p class="hint">Want a specific channel? Open it in the SiriusXM app, tap Share, and add the link above.</p>`
     : `<div class="picks-head"><h3>SIDLNE pump-up picks</h3><span class="pill ok">CLEAN</span></div>
-       <div class="song-list">${GAME_DAY_SONGS.map(([t, a]) => `<a class="song" href="${esc(MUSIC[svc].search(`${t} ${a}`))}" target="_blank" rel="noopener"><strong>${esc(t)}</strong><span>${esc(a)}</span><i>▶</i></a>`).join('')}</div>
+       <ol class="tracklist">${GAME_DAY_SONGS.map(([t, a], i) => `<li><a class="track" href="${esc(MUSIC[svc].search(`${t} ${a}`))}" target="_blank" rel="noopener"><span class="track-no">${String(i + 1).padStart(2, '0')}</span><span class="track-text"><strong>${esc(t)}</strong><small>${esc(a)}</small></span><i>▶</i></a></li>`).join('')}</ol>
        <div class="row-actions">${playLink(MUSIC[svc].search(`${sport ? sport + ' ' : ''}pump up clean`), `Find ${sport ? esc(sport.toLowerCase()) + ' ' : ''}pump-up playlists on ${MUSIC[svc].name}`)}<button class="link-btn" data-action="copy-songs">Copy song list</button></div>`;
-  showModal(`<span class="eyebrow">GAME DAY${athlete ? ' · ' + esc(athlete.name.toUpperCase()) : ''}</span><h2>🎧 Game Day mix</h2><p>Get the car fired up on the way to the game. Play to win!</p>
+  showModal(`<div class="gd-stage"><span class="eyebrow">GAME DAY${athlete ? ' · ' + esc(athlete.name.toUpperCase()) : ''}</span><h2>Game Day mix ${eq}</h2><p>Get the car fired up on the way to the game. Play to win!</p></div>
     <div class="segmented music-tabs">${Object.entries(MUSIC).map(([k, v]) => `<button class="${k === svc ? 'active' : ''}" data-action="music-service" data-service="${k}" data-athlete="${esc(athleteId)}">${v.name}</button>`).join('')}</div>
-    <div class="section"><div class="section-head"><h3>Your family’s mixes</h3><button class="link-btn" data-action="add-playlist" data-athlete="${esc(athleteId)}">＋ Add a playlist</button></div>
-      ${mine ? `<div class="list-card mixes">${mine}</div>` : `<p class="subtitle">Save the playlist your kids love from Spotify, Apple Music or SiriusXM, and it’s one tap away before every game.</p>`}</div>
+    <div class="section"><div class="section-head"><h3>Your family’s mixes</h3></div>
+      <div class="mix-grid">${mine}${addTile}</div></div>
     <div class="section">${picks}</div>`);
 }
 
@@ -1683,6 +1809,13 @@ const actions = {
     await busy(null, async () => { must(await supabase.from('athletes').delete().eq('id', el.dataset.id)); if (state.filter === el.dataset.id) state.filter = 'all'; await reload('athletes', 'teams', 'events'); closeModal(); renderApp(); });
   },
   'add-team': () => teamForm(),
+  'sort-calendar': (el) => sortCalendar(el.dataset.id),
+  'add-from-link': (el) => teamForm(null, byId(state.teams, el.dataset.id)?.calendar_url),
+  'sync-link': async (el) => {
+    el.disabled = true; el.textContent = 'Syncing…';
+    await busy(null, async () => { for (const t of linkTeams(el.dataset.id)) await syncTeam(t.id, true); toast('Calendar synced'); });
+    if (el.isConnected) { el.disabled = false; el.textContent = 'Sync now'; }
+  },
   'edit-team': (el) => teamForm(byId(state.teams, el.dataset.id)),
   'delete-team': async (el) => {
     if (!confirm('Delete this team? Events imported from its calendar are deleted too.')) return;
@@ -1867,17 +2000,12 @@ const forms = {
       athlete_id: athlete?.id || null,
       athlete_name: athlete?.name || null,
       calendar_url: f.get('calendar_url').trim() || null,
-      event_filter: (f.get('event_filter') || '').trim() || null,
     };
     const id = form.dataset.id;
     const existing = id && byId(state.teams, id);
-    // The same calendar link twice, with no filter on either, would show every event twice
-    const sameLink = (u) => String(u || '').trim().replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '').toLowerCase();
-    const twin = values.calendar_url && state.teams.find((t) => t.id !== id && sameLink(t.calendar_url) === sameLink(values.calendar_url));
-    if (twin && !values.event_filter && !twin.event_filter) {
-      throw new Error(`That calendar is already connected as “${twin.name}”. To split one calendar between kids or sports, fill in “Only events containing” on each team.`);
-    }
-    const changedFilter = existing && (existing.event_filter || null) !== values.event_filter;
+    // A calendar link another team already has: sort its events between them
+    // instead of importing every event twice
+    const twin = values.calendar_url && state.teams.some((t) => t.id !== id && linkKey(t.calendar_url) === linkKey(values.calendar_url));
     const team = id
       ? must(await supabase.from('teams').update(values).eq('id', id).select().single())
       : must(await supabase.from('teams').insert({ ...values, household_id: state.household.id }).select().single());
@@ -1887,10 +2015,30 @@ const forms = {
     await reload('teams', 'events');
     closeModal();
     renderMain();
-    if (team.calendar_url && (team.calendar_url !== existing?.calendar_url || changedFilter)) {
+    if (twin && team.calendar_url !== existing?.calendar_url) {
+      await sortCalendar(team.id);
+      return;
+    }
+    if (team.calendar_url && team.calendar_url !== existing?.calendar_url) {
       toast('Importing team calendar…');
       try { await syncTeam(team.id); } catch (err) { toast(`Calendar import failed: ${friendlyError(err)}`); }
     }
+  },
+  sort: async (f) => {
+    const { teamId, names } = state.sorting;
+    const teams = linkTeams(teamId);
+    const picks = names.map((n, i) => [n.pattern, f.get(`n${i}`) || '']);
+    const hidden = picks.filter(([, v]) => v === 'hide').map(([p]) => p);
+    for (const t of teams) {
+      // A lone team that takes everything stays that way; only hidden names are saved
+      const titles = teams.length > 1 ? picks.filter(([, v]) => v === t.id).map(([p]) => p) : [];
+      const words = (f.get(`w${t.id}`) || '').trim() || null;
+      must(await supabase.from('teams').update({ event_titles: titles, hidden_titles: hidden, event_filter: words, unsorted_titles: [] }).eq('id', t.id));
+    }
+    closeModal();
+    toast('Sorting your calendar…');
+    for (const t of teams) await syncTeam(t.id, true);
+    toast('Sorted. Every kid’s calendar is up to date.');
   },
   event: async (f, form) => {
     const date = f.get('date');

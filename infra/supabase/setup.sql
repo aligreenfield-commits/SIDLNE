@@ -1,6 +1,6 @@
 -- setup.sql: the complete SIDLNE database setup in one file.
 -- Paste into Supabase > SQL Editor and click Run. Safe to run again.
--- Generated from migrations/ (001-011); edit those, then regenerate with:
+-- Generated from migrations/ (001-012); edit those, then regenerate with:
 --   cat infra/supabase/migrations/*.sql > infra/supabase/setup.sql (keeping this header)
 -- 001_init_tables.sql
 --
@@ -879,5 +879,21 @@ create policy blocked_users_all on public.blocked_users for all
 drop policy if exists messages_delete on public.messages;
 create policy messages_delete on public.messages for delete
   using (sender_id = auth.uid() or public.is_household_admin(household_id));
+
+notify pgrst, 'reload schema';
+
+-- 012: sort a shared calendar (one Crossbar / SportsEngine link for several kids or
+-- sports) by event name instead of guessing filter words.
+--   event_titles     event names (normalized) the family put on this team
+--   hidden_titles    event names the family chose not to show (kept on every team of the link)
+--   unsorted_titles  event names in the link that no team takes yet (written by the sync)
+-- Idempotent: safe to run again.
+
+alter table public.teams add column if not exists event_titles text[] not null default '{}'
+  check (cardinality(event_titles) <= 500);
+alter table public.teams add column if not exists hidden_titles text[] not null default '{}'
+  check (cardinality(hidden_titles) <= 500);
+alter table public.teams add column if not exists unsorted_titles text[] not null default '{}'
+  check (cardinality(unsorted_titles) <= 200);
 
 notify pgrst, 'reload schema';
