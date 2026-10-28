@@ -776,8 +776,11 @@ function normTitle(title) {
 function linkKey(url) {
   return String(url || '').trim().replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '').toLowerCase();
 }
+function looseText(text) {
+  return String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
 function filterWords(filter) {
-  return String(filter || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+  return String(filter || '').split(',').map(looseText).filter(Boolean);
 }
 function belongsTo(team, siblings, title) {
   const p = normTitle(title);
@@ -786,7 +789,8 @@ function belongsTo(team, siblings, title) {
   if (owner) return owner.id === team.id;
   const words = filterWords(team.event_filter);
   if (!team.event_titles?.length && !words.length) return siblings.length <= 1;
-  return words.some((w) => String(title).toLowerCase().includes(w));
+  const t = looseText(title);
+  return words.some((w) => t.includes(w));
 }
 function linkTeams(teamId) {
   const t = byId(state.teams, teamId);
