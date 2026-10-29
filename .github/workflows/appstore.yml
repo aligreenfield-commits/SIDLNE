@@ -109,8 +109,27 @@ jobs:
           rm -f user.json users.json
           [[ "$uid" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::Unexpected user id."; exit 1; }
 
+          # A second family member (never signs in) so the reviewer has someone
+          # else's chat messages to report and block
+          CO_EMAIL="coparent@sidlne.app"
+          co_body="$(jq -n --arg e "$CO_EMAIL" --arg p "$(openssl rand -hex 24)" '{email: $e, password: $p, email_confirm: true, user_metadata: {display_name: "Alex Rivera"}}')"
+          status=$(curl -sS -o co.json -w '%{http_code}' -X POST "$base/auth/v1/admin/users" "${AUTH[@]}" --data "$co_body")
+          if [ "$status" -ge 300 ]; then
+            co_uid=""
+            for page in 1 2 3 4 5 6 7 8 9 10; do
+              curl -fsS "$base/auth/v1/admin/users?page=$page&per_page=200" "${AUTH[@]}" > users.json
+              co_uid="$(jq -r --arg e "$CO_EMAIL" '.users[] | select(.email == $e) | .id' users.json | head -1)"
+              [ -n "$co_uid" ] && break
+              [ "$(jq '.users | length' users.json)" -lt 200 ] && break
+            done
+          else
+            co_uid="$(jq -r .id co.json)"
+          fi
+          rm -f co.json users.json
+          [[ "$co_uid" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::Couldn't create the demo family's second member."; exit 1; }
+
           # Sample family, rebuilt so the schedule is current
-          sed "s/__REVIEW_UID__/$uid/" infra/supabase/review-seed.sql > seed.sql
+          sed "s/__REVIEW_UID__/$uid/; s/__COPARENT_UID__/$co_uid/" infra/supabase/review-seed.sql > seed.sql
           jq -n --rawfile q seed.sql '{query: $q}' > body.json
           status=$(curl -sS -o seed-response.json -w '%{http_code}' -X POST \
             "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
