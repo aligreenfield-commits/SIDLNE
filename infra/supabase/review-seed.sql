@@ -1,10 +1,12 @@
 -- Sample data for the App Review demo account (run by .github/workflows/appstore.yml).
--- __REVIEW_UID__ is replaced with the demo user's id. Rebuilds the "Review Family"
--- each run so its games are always in the coming weeks.
+-- __REVIEW_UID__ is replaced with the demo user's id and __COPARENT_UID__ with a second
+-- member (Alex Rivera, never signs in) whose chat messages the reviewer can report or
+-- block. Rebuilds the "Review Family" each run so its games are always in the coming weeks.
 
 do $$
 declare
   uid uuid := '__REVIEW_UID__';
+  co uuid := '__COPARENT_UID__';
   hid uuid;
   avery uuid;
   jordan uuid;
@@ -19,6 +21,10 @@ begin
 
   insert into public.households (name, created_by) values ('Review Family', uid) returning id into hid;
   insert into public.household_members (household_id, profile_id, role) values (hid, uid, 'owner');
+  update public.profiles set display_name = 'Alex Rivera' where id = co;
+  insert into public.household_members (household_id, profile_id, role) values (hid, co, 'member');
+  delete from public.blocked_users where blocker_id = uid;
+  delete from public.message_reports where reporter_id = uid;
   insert into public.athletes (household_id, name, color) values (hid, 'Avery', '#9a78bf') returning id into avery;
   insert into public.athletes (household_id, name, color) values (hid, 'Jordan', '#6e9bc8') returning id into jordan;
   insert into public.teams (household_id, athlete_id, name, sport) values (hid, avery, 'Hawks U12 Lacrosse', 'Lacrosse') returning id into lax;
@@ -48,9 +54,10 @@ begin
     end if;
   end loop;
 
-  insert into public.messages (household_id, sender_id, body) values
-    (hid, uid, 'Welcome to SIDLNE! Saturday has two games at the same time, so we need a second driver.'),
-    (hid, uid, 'I can take Avery to lacrosse. Who has Jordan?');
+  insert into public.messages (household_id, sender_id, body, inserted_at) values
+    (hid, co, 'Saturday has two games at the same time, so we need a second driver.', now() - interval '50 minutes'),
+    (hid, uid, 'I can take Avery to lacrosse. Who has Jordan?', now() - interval '40 minutes'),
+    (hid, co, 'I''ve got Jordan. I''ll bring orange slices for the team.', now() - interval '30 minutes');
 
   if to_regclass('public.game_day_playlists') is not null then
     insert into public.game_day_playlists (household_id, title, url, service, created_by)
