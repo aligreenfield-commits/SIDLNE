@@ -1,26 +1,23 @@
-# Supabase migrations & infra README
+# Database migrations
 
-This folder contains SQL migrations, RLS policies, and helper scripts to set up the Supabase schema for SIDLNE.
+The SIDLNE schema lives in `infra/supabase/migrations/` and is applied in filename order:
 
-Files added:
-- infra/supabase/migrations/001_init_tables.sql  -- initial schema
-- infra/supabase/policies.sql                    -- Row Level Security policies
-- infra/supabase/seed.sql                        -- optional seed/demo data
-- infra/scripts/migrate.sh                       -- helper script to run migrations via psql
+| File | Contents |
+| --- | --- |
+| `001_init_tables.sql` | Tables, columns, foreign keys and indexes |
+| `002_security.sql` | Row Level Security policies, the signup trigger, household RPCs (`create_household`, `join_household`, `rotate_invite_code`, `delete_my_account`) and realtime publication |
 
-How to run (local):
-1. Create a Supabase project at https://app.supabase.com/
-2. Export your Postgres connection string (use the Database > Connection string in project settings):
+Every statement is idempotent, so you can re-run the full set after pulling changes. Databases created from the earlier version of this schema are upgraded in place.
 
-   export SUPABASE_DB_URL="postgresql://..."
+## Apply
 
-3. Run the migration script:
+```bash
+export SUPABASE_DB_URL="postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres"
+./infra/scripts/migrate.sh
+```
 
-   chmod +x infra/scripts/migrate.sh
-   ./infra/scripts/migrate.sh
+You can also add `SUPABASE_DB_URL` as a repository secret and run the **Run Supabase migrations** workflow from the Actions tab, or paste the files into the Supabase SQL editor in order.
 
-Or run the SQL files directly from the Supabase SQL editor (copy/paste the files in order).
+## Adding a migration
 
-CI / automated migration notes:
-- For CI, prefer running migrations from a dedicated service account (service_role key) or via a CI runner that has access to the project's DB connection string.
-- Do NOT commit service_role keys to the repo. Store them as GitHub Actions secrets (e.g. SUPABASE_DB_URL or SUPABASE_SERVICE_ROLE_KEY) and reference them in workflows.
+Create `003_<name>.sql` and keep it idempotent (`if not exists`, `create or replace`, `drop policy if exists`). Never commit the `service_role` key or database password. Keep them in GitHub Actions secrets.

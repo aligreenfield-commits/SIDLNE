@@ -1,0 +1,195 @@
+# Builds the SIDLNE iPhone app on a GitHub-hosted Mac.
+#
+# Every run compiles the app for the iOS Simulator (no Apple account needed),
+# so a broken native project shows up as a red check.
+#
+# When the App Store Connect secrets below are set, a push to main (or a manual
+# run) also archives, signs and uploads a build to TestFlight / App Store Connect.
+#
+# Secrets (Settings > Environments > NEW KEYS, or repository secrets):
+#   APPLE_TEAM_ID                 10-character Team ID (developer.apple.com > Membership)
+#   APP_STORE_CONNECT_KEY_ID      App Store Connect API key ID
+#   APP_STORE_CONNECT_ISSUER_ID   API key issuer ID
+#   APP_STORE_CONNECT_KEY         Contents of the AuthKey_XXXX.p8 file
+# See APP_STORE.md for how to create them.
+
+name: iOS app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - "assets/**"
+      - "index.html"
+      - "config.js"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.json"
+      - "scripts/build-web.mjs"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "package.json"
+      - "package-lock.json"
+      - "capacitor.config.json"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    # The App Store Connect secrets live in the "NEW KEYS" environment
+    environment: NEW KEYS
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # Key ID and Issuer ID aren't secret, so either a secret or a variable works
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || vars.APP_STORE_CONNECT_KEY_ID }}
+      # Key ID of the App Store Connect API key (not secret). Used when the setting
+      # above is empty or isn't a Key ID. Update it if you replace the key.
+      DEFAULT_ASC_KEY_ID: T66KX7L8H8
+      # Apple Developer Team ID (developer.apple.com > Account > Membership; not secret)
+      DEFAULT_TEAM_ID: V3LQXRMUDZ
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || vars.APP_STORE_CONNECT_ISSUER_ID }}
+      ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install and copy the web app into the iOS project
+        run: |
+          npm ci
+          npm run ios:sync
+
+      - name: Show Xcode version and schemes
+        run: |
+          xcodebuild -version
+          xcodebuild -list -project ios/App/App.xcodeproj
+
+      - name: Compile for the iOS Simulator (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO | tail -40
+
+      - name: Archive, sign and upload to App Store Connect
+        if: github.event_name != 'pull_request' && env.ASC_KEY != '' && env.APPLE_TEAM_ID != ''
+        run: |
+          set -euo pipefail
+          # Name every missing setting up front instead of failing deep inside xcodebuild
+          missing=()
+          ASC_KEY_ID="$(printf '%s' "$ASC_KEY_ID" | tr -d '[:space:]')"
+          # Use the APP_STORE_CONNECT_KEY_ID setting when it holds a Key ID, else the one in this file
+          [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || ASC_KEY_ID="$DEFAULT_ASC_KEY_ID"
+          echo "Using Key ID $ASC_KEY_ID"
+          [ -n "$ASC_ISSUER_ID" ] || missing+=(APP_STORE_CONNECT_ISSUER_ID)
+          # Accept the .p8 text with or without its BEGIN/END lines (easy to miss when copying on a phone)
+          KEY_BODY="$(printf '%s' "$ASC_KEY" | tr -d '[:space:]')"
+          case "$ASC_KEY" in *"BEGIN PRIVATE KEY"*) has_begin=yes ;; *) has_begin=no ;; esac
+          echo "Key text from APP_STORE_CONNECT_KEY: ${#KEY_BODY} characters, BEGIN line: $has_begin"
+          case "$ASC_KEY" in
+            *"BEGIN PRIVATE KEY"*) ;;
+            *)
+              if [ "${#KEY_BODY}" -ge 100 ] && [[ "$KEY_BODY" =~ ^[A-Za-z0-9+/=]+$ ]]; then
+                ASC_KEY="$(printf -- '-----BEGIN PRIVATE KEY-----\n%s\n-----END PRIVATE KEY-----\n' "$(printf '%s' "$KEY_BODY" | fold -w 64)")"
+              else
+                missing+=("APP_STORE_CONNECT_KEY (should be the text of the .p8 file, about 200 characters; this one is ${#KEY_BODY})")
+              fi ;;
+          esac
+          if [ ${#missing[@]} -gt 0 ]; then
+            for m in "${missing[@]}"; do echo "::error::Missing or empty: $m (Settings > Secrets and variables > Actions)"; done
+            exit 1
+          fi
+          ASC_ISSUER_ID="$(printf '%s' "$ASC_ISSUER_ID" | tr -d '[:space:]')"
+          APPLE_TEAM_ID="$(printf '%s' "$APPLE_TEAM_ID" | tr -d '[:space:]')"
+          if [ "$APPLE_TEAM_ID" != "$DEFAULT_TEAM_ID" ]; then
+            echo "::warning::APPLE_TEAM_ID setting doesn't match the Team ID in ios.yml; using $DEFAULT_TEAM_ID"
+            APPLE_TEAM_ID="$DEFAULT_TEAM_ID"
+          fi
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s' "$ASC_KEY" > "$KEY_PATH"
+          # Check the key with Apple first, so a wrong key gets a clear message
+          ruby .github/scripts/asc-check.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID"
+          ASC_ISSUER_ID="$(< "$KEY_PATH.issuer")"
+          # Push notifications need the capability on the App ID before the profile is made
+          ruby .github/scripts/asc-push.rb "$KEY_PATH" "$ASC_KEY_ID" "$ASC_ISSUER_ID" || true
+
+          AUTH=(-allowProvisioningUpdates
+                -authenticationKeyPath "$KEY_PATH"
+                -authenticationKeyID "$ASC_KEY_ID"
+                -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+
+          # Build numbers must increase with every upload
+          BUILD_NUMBER=$(( 100 + GITHUB_RUN_NUMBER ))
+
+          # Archive unsigned; the export below signs it for the App Store with a cloud-managed
+          # distribution certificate. (A development-signed archive would need a registered iPhone.)
+          # Cloud signing requires an App Store Connect API key with Admin access.
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/SIDLNE.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            "${AUTH[@]}" | tail -40
+
+          # Export signs with the entitlements already on the archived app, and an unsigned
+          # archive has none. Sign it ad hoc with the App Store entitlements (push) so they carry over.
+          APP="$RUNNER_TEMP/SIDLNE.xcarchive/Products/Applications/App.app"
+          sed 's#<string>development</string>#<string>production</string>#' ios/App/App/App.entitlements > "$RUNNER_TEMP/App.entitlements"
+          if [ -d "$APP/Frameworks" ]; then
+            find "$APP/Frameworks" -mindepth 1 -maxdepth 1 \( -name '*.framework' -o -name '*.dylib' \) -exec codesign --force --sign - --timestamp=none {} \;
+          fi
+          codesign --force --sign - --timestamp=none --entitlements "$RUNNER_TEMP/App.entitlements" "$APP"
+          ENTITLEMENTS="$(codesign -d --entitlements - "$APP" 2>&1 || true)"
+          if [[ "$ENTITLEMENTS" == *aps-environment* ]]; then
+            echo "Archive carries the push entitlement."
+          else
+            echo "::warning::The archived app has no push entitlement; notifications won't work in this build."
+          fi
+
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+
+          if ! xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/SIDLNE.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            "${AUTH[@]}" 2>&1 | tee "$RUNNER_TEMP/export.log"; then
+            if grep -q "Cloud signing permission error" "$RUNNER_TEMP/export.log"; then
+              echo "::error::API key $ASC_KEY_ID can't sign for the App Store: it needs Access = Admin (App Store Connect > Integrations > Team Keys)."
+            fi
+            exit 1
+          fi
+
+          echo "::notice::Uploaded build $BUILD_NUMBER to App Store Connect. It appears in TestFlight after Apple finishes processing (about 10-30 minutes)."
+
+      - name: Upload skipped
+        if: github.event_name != 'pull_request' && (env.ASC_KEY == '' || env.APPLE_TEAM_ID == '')
+        run: echo "::notice::The app compiled. Add the App Store Connect secrets (see APP_STORE.md) to upload builds to TestFlight."

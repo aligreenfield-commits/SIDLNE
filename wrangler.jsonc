@@ -1,0 +1,9 @@
+// Cloudflare deploy config: SIDLNE is a static site with no build step.
+// Used when Cloudflare builds this repo as a Worker with static assets.
+{
+  "name": "sidlne",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "."
+  }
+}

@@ -1,0 +1,55 @@
+# Checks that the public site is up and serving the real app.
+name: Site check
+
+on:
+  push:
+    paths:
+      - ".github/workflows/site-check.yml"
+  schedule:
+    - cron: "17 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check https://sidlne.app
+        run: |
+          set -u
+          fail=0
+          for path in / /welcome/ /config.js /icons/share-card.png; do
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' -L --max-time 20 "https://sidlne.app$path" || echo 000)
+            echo "https://sidlne.app$path -> HTTP $code"
+            [ "$code" = 200 ] || fail=1
+          done
+          if grep -q 'reufyrhowxxivpmobouz' <(curl -sS -L --max-time 20 https://sidlne.app/config.js); then
+            echo "config.js points at the SIDLNE Supabase project"
+          else
+            echo "::error::config.js on sidlne.app is missing the Supabase settings"; fail=1
+          fi
+          # The live app should be the latest code on main (Cloudflare redeploys on every push)
+          for f in assets/app.js assets/styles.css; do
+            if [ "$(curl -sS -L --max-time 20 "https://sidlne.app/$f" | sha256sum | cut -c1-64)" = "$(sha256sum "$f" | cut -c1-64)" ]; then
+              echo "$f on sidlne.app matches main"
+            else
+              echo "::warning::$f on sidlne.app differs from main (deploy pending or stuck?)"
+            fi
+          done
+          echo "--- DNS ---"; getent hosts sidlne.app || echo "sidlne.app does not resolve"
+          echo "--- Cloudflare Pages project address ---"
+          curl -sS -o /dev/null -w 'https://sidlne.pages.dev -> HTTP %{http_code}\n' --max-time 20 https://sidlne.pages.dev/ || echo "sidlne.pages.dev not reachable"
+          echo "--- Nameservers for sidlne.app ---"; dig +short NS sidlne.app @1.1.1.1 || true
+          echo "--- Backend (Supabase) the app talks to ---"
+          cfg="$(curl -sS -L --max-time 20 https://sidlne.app/config.js)"
+          url="$(printf '%s' "$cfg" | grep -oE 'https://[a-z0-9]+\.supabase\.co' | head -1)"
+          key="$(printf '%s' "$cfg" | grep -oE '(eyJ[A-Za-z0-9._-]{40,}|sb_publishable_[A-Za-z0-9_-]+)' | head -1)"
+          for ep in auth/v1/health "rest/v1/" "functions/v1/sync-calendar"; do
+            code=$(curl -sS -o /tmp/be -w '%{http_code}' --max-time 20 -H "apikey: $key" "$url/$ep" || echo 000)
+            echo "$ep -> HTTP $code $(head -c 160 /tmp/be | tr -d '\n')"
+          done
+          exit $fail

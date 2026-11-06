@@ -1,0 +1,20 @@
+# Files that are not part of the public website
+.git
+.github
+.gitignore
+.assetsignore
+wrangler.jsonc
+node_modules
+infra
+mobile
+supabase
+README.md
+.wrangler
+package.json
+package-lock.json
+capacitor.config.json
+scripts
+ios
+www
+APP_STORE.md
+node_modules
