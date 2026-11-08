@@ -36,6 +36,11 @@ on:
         description: "If a version is waiting for review, pull it back first so locked details (like the name) can change, then resubmit"
         type: boolean
         default: false
+      eu:
+        description: "Only change availability in the 27 EU countries (off while Apple verifies the Digital Services Act trader status, on once it's done)"
+        type: choice
+        options: [unchanged, "off", "on"]
+        default: unchanged
 
 permissions:
   contents: read
@@ -63,11 +68,12 @@ jobs:
       WITHDRAW: ${{ inputs.withdraw }}
       STATUS_ONLY: ${{ inputs.status_only }}
       TESTFLIGHT: ${{ inputs.testflight }}
+      EU: ${{ inputs.eu }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Demo account for App Review
-        if: ${{ !inputs.status_only }}
+        if: ${{ !inputs.status_only && inputs.eu == 'unchanged' }}
         run: |
           set -euo pipefail
           token="$(printf '%s' "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"

@@ -77,6 +77,32 @@ abort "::error::No app with bundle ID #{BUNDLE} in App Store Connect." unless ap
 app_id = app["id"]
 step "App: #{app.dig("attributes", "name")} (#{app_id})"
 
+# --- EU availability only (Digital Services Act) ---------------------------------
+# The EU needs a verified trader status; until Apple finishes that check, the app
+# can be offered everywhere else. EU=off hides it there, EU=on brings it back.
+EU_TERRITORIES = %w[AUT BEL BGR HRV CYP CZE DNK EST FIN FRA DEU GRC HUN IRL ITA LVA LTU LUX MLT NLD POL PRT ROU SVK SVN ESP SWE].freeze
+if %w[on off].include?(ENV["EU"])
+  available = ENV["EU"] == "on"
+  avail = api(:get, "/v1/apps/#{app_id}/appAvailabilityV2", ok_missing: true)
+  abort "::error::The app has no availability set yet. Run the workflow once without the EU option first." unless avail
+  url = "/v2/appAvailabilities/#{avail.dig("data", "id")}/territoryAvailabilities?include=territory&limit=200"
+  changed = 0
+  while url
+    page = api(:get, url)
+    page["data"].each do |ta|
+      territory = ta.dig("relationships", "territory", "data", "id")
+      next unless EU_TERRITORIES.include?(territory)
+      next if ta.dig("attributes", "available") == available
+      api(:patch, "/v1/territoryAvailabilities/#{ta["id"]}", { data: { type: "territoryAvailabilities", id: ta["id"],
+        attributes: { available: available } } })
+      changed += 1
+    end
+    url = page.dig("links", "next")
+  end
+  puts "::notice::#{available ? "Available again" : "No longer offered"} in the #{EU_TERRITORIES.size} EU countries (#{changed} changed). Everywhere else is unchanged."
+  exit 0
+end
+
 versions = api(:get, "/v1/apps/#{app_id}/appStoreVersions?filter[platform]=IOS&limit=20")["data"]
 state = ->(v) { v.dig("attributes", "appVersionState") || v.dig("attributes", "appStoreState") }
 if ENV["STATUS_ONLY"] == "true"
