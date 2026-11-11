@@ -390,7 +390,17 @@ begin
   rescue ApiError => e
     raise unless e.status == "409" && e.message =~ /already|ITEM_PART_OF_ANOTHER_SUBMISSION|duplicate/i
   end
-  api(:patch, "/v1/reviewSubmissions/#{submission["id"]}", { data: { type: "reviewSubmissions", id: submission["id"], attributes: { submitted: true } } })
+  # Apple briefly reports the version as not ready right after the listing is updated
+  attempts = 0
+  begin
+    attempts += 1
+    api(:patch, "/v1/reviewSubmissions/#{submission["id"]}", { data: { type: "reviewSubmissions", id: submission["id"], attributes: { submitted: true } } })
+  rescue ApiError => e
+    raise unless e.status == "409" && e.message =~ /STATE_ERROR|try again later/i && attempts < 12
+    step "Version not ready yet, retrying in 30s (#{attempts}/12)"
+    sleep 30
+    retry
+  end
 rescue ApiError => e
   puts "::error::Apple didn't accept the submission yet. #{e.message}"
   if e.message =~ /privacy|data collection|App Privacy/i
