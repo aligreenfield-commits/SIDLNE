@@ -12,6 +12,8 @@ const SPORT_ICONS = { Baseball: '⚾', Basketball: '🏀', 'Field Hockey': '🏑
 const HOUSEHOLD_KEY = 'sidlne-household';
 // Running inside the iPhone app (Capacitor) rather than a browser
 const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+// The app never pinch-zooms: a zoomed-in view stays cut off at the sides
+if (NATIVE) document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover');
 const Plugins = window.Capacitor?.Plugins || {};
 // Links that leave the app (emails, invites) must point at the public site
 const PUBLIC_URL = NATIVE ? 'https://sidlne.app/' : location.origin + location.pathname;
