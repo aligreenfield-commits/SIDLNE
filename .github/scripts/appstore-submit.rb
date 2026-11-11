@@ -381,9 +381,12 @@ begin
   pending = api(:get, "/v1/reviewSubmissions?filter[app]=#{app_id}&filter[platform]=IOS&filter[state]=READY_FOR_REVIEW,UNRESOLVED_ISSUES&limit=5")["data"]
   submission = pending.first || api(:post, "/v1/reviewSubmissions", { data: { type: "reviewSubmissions",
     attributes: { platform: "IOS" }, relationships: { app: rel("apps", app_id) } } })["data"]
+  # A rejected submission (unresolved issues) already holds the version: just send it again
   begin
-    api(:post, "/v1/reviewSubmissionItems", { data: { type: "reviewSubmissionItems", relationships: {
-      reviewSubmission: rel("reviewSubmissions", submission["id"]), appStoreVersion: rel("appStoreVersions", version_id) } } })
+    unless submission.dig("attributes", "state") == "UNRESOLVED_ISSUES"
+      api(:post, "/v1/reviewSubmissionItems", { data: { type: "reviewSubmissionItems", relationships: {
+        reviewSubmission: rel("reviewSubmissions", submission["id"]), appStoreVersion: rel("appStoreVersions", version_id) } } })
+    end
   rescue ApiError => e
     raise unless e.status == "409" && e.message =~ /already|ITEM_PART_OF_ANOTHER_SUBMISSION|duplicate/i
   end
