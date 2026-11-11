@@ -474,3 +474,5 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .track:hover{border-color:var(--green);background:#f7fbef}
 @media(max-width:700px){.tracklist,.chan-grid{grid-template-columns:1fr}.mix-grid{grid-template-columns:1fr 1fr}.mix-title{font-size:17px}.gd-stage h2{font-size:26px}}
 @media(prefers-reduced-motion:reduce){.eq i,.loading-bar{animation:none}.eq i{height:70%}.mix-disc{transition:none}}
+/* iPhone and iPad zoom the whole page in when you tap a field with text under 16px, and stay zoomed */
+@media(pointer:coarse){input,select,textarea,.leg select,.sort-row select{font-size:16px}}
