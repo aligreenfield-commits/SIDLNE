@@ -1146,7 +1146,7 @@ function carpoolPageHTML() {
     <div class="carpool-head"><div><span class="eyebrow">CARPOOL</span><h2>🚙 ${esc(c.name)}</h2><p class="subtitle">Next ${CARPOOL_DAYS} days${c.event_filter ? ` · only “${esc(c.event_filter)}” events` : ''} · <span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} ${open === 1 ? 'DRIVE' : 'DRIVES'} OPEN` : 'ALL COVERED'}</span></p></div>
       <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-import" data-id="${c.id}">📄 Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button>${ownsCarpool(c) ? `<button class="outline" data-action="edit-carpool" data-id="${c.id}">✏️ Edit carpool</button>` : ''}</div></div>
     <div class="section"><div class="section-head"><h2>Drivers</h2><div class="head-actions">${me ? `<button class="link-btn" data-action="carpool-me" data-id="${c.id}">Edit my info</button>` : `<button class="outline" data-action="carpool-me" data-id="${c.id}">＋ Add me as a driver</button>`}${ownsCarpool(c) ? `<button class="link-btn" data-action="carpool-add-parent" data-id="${c.id}">＋ Add a parent</button>` : ''}</div></div>
-      <div class="athlete-chips">${members.length ? members.map((m) => `<span class="athlete-chip">${esc(m.name)}${m.seats != null ? ` · ${m.seats} ${m.seats === 1 ? 'seat' : 'seats'}` : ''}${m.phone ? ` · <a href="tel:${esc(m.phone.replace(/[^\d+]/g, ''))}">${esc(m.phone)}</a>` : ''}${m.profile_id ? '' : ' <small class="sub">(not joined)</small>'}</span>`).join('') : '<p class="subtitle">No drivers yet. Invite the other parents.</p>'}</div></div>
+      <div class="athlete-chips">${members.length ? members.map((m) => `<span class="athlete-chip">${esc(m.name)}${m.seats != null ? ` · ${m.seats} ${m.seats === 1 ? 'seat' : 'seats'}` : ''}${m.phone ? ` · <a href="tel:${esc(m.phone.replace(/[^\d+]/g, ''))}">${esc(m.phone)}</a>` : ''}${m.profile_id ? '' : ` <small class="sub">(not joined)</small> <button class="link-btn" data-action="carpool-claim" data-id="${m.id}">That’s me</button>`}</span>`).join('') : '<p class="subtitle">No drivers yet. Invite the other parents.</p>'}</div></div>
     <div class="panel carpool-grid">${rows}</div>
     ${ownsCarpool(c) ? `<div class="row-actions"><button class="danger-btn" data-action="delete-carpool" data-id="${c.id}">Delete carpool</button></div>` : me ? `<div class="row-actions"><button class="danger-btn" data-action="leave-carpool" data-id="${c.id}">Leave carpool</button></div>` : ''}`;
 }
@@ -1800,6 +1800,13 @@ const actions = {
   'delete-carpool': async (el) => {
     if (!confirm('Delete this carpool for everyone?')) return;
     await busy(null, async () => { must(await supabase.from('carpools').delete().eq('id', el.dataset.id)); await loadCarpools(); closeCarpool(); toast('Carpool deleted'); });
+  },
+  'carpool-claim': async (el) => {
+    const m = carpoolMember(el.dataset.id);
+    if (!m) return;
+    const mine = myCarpoolMember(m.carpool_id);
+    if (!confirm(mine ? `Are you “${m.name}”? Their drives become yours, and you’ll show as “${m.name}” in this carpool.` : `Are you “${m.name}”? Their drives become yours.`)) return;
+    await busy(null, async () => { must(await supabase.rpc('claim_carpool_member', { member: m.id })); await loadCarpools(); renderMain(); toast(`You’re ${m.name} in this carpool`); });
   },
   'leave-carpool': async (el) => {
     if (!confirm('Leave this carpool? Your drives will be unassigned.')) return;
