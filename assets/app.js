@@ -925,13 +925,33 @@ function eventForm(e, dateKey) {
   const start = e ? new Date(e.start) : (() => { const d = dateKey ? dateFromKey(dateKey) : new Date(); d.setHours(17, 0, 0, 0); return d; })();
   const end = e?.end ? new Date(e.end) : new Date(+start + 3600e3);
   showModal(`<span class="eyebrow">${e ? 'EDIT EVENT' : 'NEW EVENT'}</span><h2>${e ? esc(e.title) : 'Add an event'}</h2>${e?.source === 'ical' ? '<p>This event comes from a team calendar. Changes may be replaced the next time it syncs.</p>' : ''}
-    <form class="form" data-form="event" data-id="${e?.id || ''}"><label>Event name<input name="title" required maxlength="200" value="${esc(e?.title)}" placeholder="Practice, game, tournament…"></label>
+    <form class="form" data-form="event" data-id="${e?.id || ''}">${e ? '' : `<button type="button" class="tournament-link" data-action="add-tournament" data-date="${esc(dateKey || '')}">🏆 Adding a tournament? Enter all its games at once</button>`}<label>Event name<input name="title" required maxlength="200" value="${esc(e?.title)}" placeholder="Practice, game, tournament…"></label>
     <div class="form-grid"><label>Athlete<select name="athlete_id"><option value="">Everyone</option>${state.athletes.map((a) => `<option value="${a.id}" ${athleteOf(e || {})?.id === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
     <label>Team<select name="team_id" ${e?.source === 'ical' && e.team_id ? 'disabled title="Set by the team calendar"' : ''}><option value="">—</option>${state.teams.map((t) => `<option value="${t.id}" ${e?.team_id === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label></div>
     <div class="form-grid three"><label>Date<input name="date" type="date" required value="${key(start)}"></label><label>Starts<input name="start" type="time" required value="${timeInput(start)}"></label><label>Ends<input name="end" type="time" value="${timeInput(end)}"></label></div>
     <label>Location<input name="location" maxlength="200" value="${esc(e?.location)}" placeholder="Field, gym or address"></label>
     <label>Notes<textarea name="description" maxlength="2000">${esc(e?.description)}</textarea></label>
     <button class="primary full" type="submit">${e ? 'Save changes' : 'Add event'}</button></form>`);
+}
+
+// A tournament is several games on one or two days. SE Tourney and TSIC have no
+// calendar feed, so the family copies the team's games from the app in one go.
+function tournamentGameRow(date = '') {
+  return `<div class="game-row"><label>Date<input name="g_date" type="date" value="${esc(date)}"></label><label>Time<input name="g_time" type="time"></label>
+    <label class="wide">Opponent<input name="g_opp" maxlength="100" placeholder="e.g. Greenwich Warriors"></label><label class="wide">Field<input name="g_field" maxlength="100" placeholder="e.g. Upper Turf - Field 6"></label></div>`;
+}
+
+function tournamentForm(dateKey) {
+  const d = dateKey || key(new Date());
+  showModal(`<span class="eyebrow">NEW TOURNAMENT</span><h2>Add a tournament</h2><p>Copy the team’s games from SportsEngine Tourney, TSIC or the tournament site. Each game goes on the calendar.</p>
+    <form class="form" data-form="tournament"><label>Tournament name<input name="name" required maxlength="120" placeholder="e.g. Gobbler Games"></label>
+    <div class="form-grid"><label>Athlete<select name="athlete_id"><option value="">Everyone</option>${state.athletes.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select></label>
+    <label>Team<select name="team_id"><option value="">—</option>${state.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label></div>
+    <div class="form-grid"><label>Where<input name="venue" maxlength="120" placeholder="Town or venue, e.g. Bedford, NY"></label><label>Game length (minutes)<input name="minutes" type="number" min="10" max="240" value="35"></label></div>
+    <label>Tournament link (optional)<input name="link" type="url" maxlength="500" placeholder="Paste the SE Tourney or TSIC share link"><small class="hint">Saved on each game so you can check brackets and changes.</small></label>
+    <h3 class="games-head">Games</h3><div id="gameRows">${[1, 2, 3].map(() => tournamentGameRow(d)).join('')}</div>
+    <button type="button" class="outline" data-action="add-game-row">＋ Add another game</button>
+    <button class="primary full" type="submit">Add tournament</button></form>`);
 }
 
 function openEvent(id) {
@@ -1757,6 +1777,8 @@ const actions = {
     renderMain();
   },
   'add-event': (el) => eventForm(null, el.dataset.date),
+  'add-tournament': (el) => tournamentForm(el.dataset.date),
+  'add-game-row': () => { const rows = document.getElementById('gameRows'); const last = [...rows.querySelectorAll('input[name=g_date]')].pop()?.value || ''; rows.insertAdjacentHTML('beforeend', tournamentGameRow(last)); rows.lastElementChild.querySelector('input[name=g_time]').focus(); },
   'open-event': (el) => openEvent(el.dataset.id),
   'edit-event': (el) => eventForm(byId(state.events, el.dataset.id)),
   'delete-event': async (el) => {
@@ -2054,6 +2076,41 @@ const forms = {
     toast('Sorting your calendar…');
     for (const t of teams) await syncTeam(t.id, true);
     toast('Sorted. Every kid’s calendar is up to date.');
+  },
+  tournament: async (f) => {
+    const name = f.get('name').trim();
+    const team = byId(state.teams, f.get('team_id'));
+    const venue = f.get('venue').trim();
+    const link = f.get('link').trim();
+    if (link && !/^https:\/\//i.test(link)) throw new Error('Paste the full link, starting with https://');
+    const minutes = Math.min(240, Math.max(10, +f.get('minutes') || 35));
+    const [dates, times, opps, fields] = ['g_date', 'g_time', 'g_opp', 'g_field'].map((k) => f.getAll(k).map((v) => String(v).trim()));
+    const rows = [];
+    dates.forEach((date, i) => {
+      if (!times[i] && !opps[i] && !fields[i]) return; // blank row
+      if (!date || !times[i]) throw new Error(`Game ${i + 1} needs a date and a time`);
+      const start = new Date(`${date}T${times[i]}`);
+      rows.push({
+        household_id: state.household.id, created_by: state.session.user.id, source: 'manual',
+        title: `${name}${opps[i] ? `: vs ${opps[i]}` : ' game'}`,
+        athlete_id: f.get('athlete_id') || team?.athlete_id || null,
+        team_id: team?.id || null,
+        start: start.toISOString(),
+        end: new Date(+start + minutes * 60e3).toISOString(),
+        location: [fields[i], venue].filter(Boolean).join(', ') || null,
+        description: [`Tournament: ${name}`, link].filter(Boolean).join('\n'),
+      });
+    });
+    if (!rows.length) throw new Error('Add at least one game with a date and time');
+    must(await supabase.from('events').insert(rows));
+    await reload('events');
+    const first = new Date(rows.map((r) => r.start).sort()[0]);
+    state.selected = key(first);
+    state.monthCursor = firstOfMonth(first);
+    closeModal();
+    if (!['Overview', 'Calendar'].includes(state.tab)) state.tab = 'Calendar';
+    renderMain();
+    toast(`${name}: ${rows.length} ${rows.length === 1 ? 'game' : 'games'} added`);
   },
   event: async (f, form) => {
     const date = f.get('date');
