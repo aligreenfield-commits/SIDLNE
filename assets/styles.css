@@ -493,3 +493,7 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .head-buttons{display:flex;flex-direction:column;align-items:stretch;gap:8px;flex-shrink:0}
 .head-buttons .outline{white-space:nowrap}
 @media(max-width:700px){.head-buttons .outline{padding:10px;font-size:12px}}
+/* Carpool chat @mentions */
+.mention{color:#4c6125;background:#eef6d8;border-radius:4px;padding:0 3px}
+.mention-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;font-size:12px;color:var(--muted)}
+.mention-chips button{font-size:12px;font-weight:700;color:#4c6125;background:#f3f8e6;border:1px solid #d7e8ae;border-radius:999px;padding:5px 10px}
