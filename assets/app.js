@@ -44,6 +44,7 @@ const state = {
   carpoolId: null,
   carpoolEvents: [],
   carpoolChannel: null,
+  carpoolMessages: [],
   playlists: [],
   tab: 'Overview',
   view: 'week',
@@ -1126,7 +1127,7 @@ async function carpoolSchedule(cid) {
 
 async function openCarpool(id) {
   state.carpoolId = id;
-  state.carpoolEvents = await carpoolSchedule(id);
+  [state.carpoolEvents] = await Promise.all([carpoolSchedule(id), loadCarpoolMessages(id)]);
   subscribeCarpool(id);
   if (state.tab !== 'Rides') go('Rides'); else renderMain();
 }
@@ -1144,7 +1145,47 @@ function subscribeCarpool(id) {
   state.carpoolChannel = supabase.channel(`carpool-${id}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'carpool_rides', filter: `carpool_id=eq.${id}` }, refresh)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'carpool_members', filter: `carpool_id=eq.${id}` }, refresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'carpool_messages', filter: `carpool_id=eq.${id}` }, async () => { await loadCarpoolMessages(id); if (state.carpoolId === id) renderCarpoolMessages(); })
     .subscribe();
+}
+
+// Carpool chat: the parents in a carpool, across families
+async function loadCarpoolMessages(cid) {
+  const { data, error } = await supabase.from('carpool_messages').select('*').eq('carpool_id', cid).order('inserted_at', { ascending: false }).limit(200);
+  if (error) { console.warn('Carpool chat unavailable:', error.message); state.carpoolMessages = []; return; }
+  state.carpoolMessages = data.reverse();
+}
+
+function carpoolSenderName(cid, profileId) {
+  return state.carpoolMembers.find((m) => m.carpool_id === cid && m.profile_id === profileId)?.name || (profileId ? memberName(profileId) : 'Former member');
+}
+
+function carpoolMessagesHTML(cid) {
+  const me = state.session.user.id;
+  const list = state.carpoolMessages.filter((m) => m.carpool_id === cid && !state.blocked.has(m.sender_id) && !state.reported.has(m.id));
+  if (!list.length) return '<div class="empty"><h3>No messages yet.</h3><p>Running late, swapping a drive, who has the snacks? Message every parent in the carpool here.</p></div>';
+  return list.map((m) => {
+    const name = carpoolSenderName(cid, m.sender_id);
+    const when = new Date(m.inserted_at);
+    const stamp = key(when) === key(new Date()) ? fmtTime(when) : `${fmtDate(when)} · ${fmtTime(when)}`;
+    return `<div class="message ${m.sender_id === me ? 'mine' : ''}"><span class="avatar">${initials(name)}</span><div class="bubble"><small>${esc(name)} · ${esc(stamp)}<button class="msg-more" data-action="carpool-message-menu" data-id="${m.id}" aria-label="Message options: report, block or delete">⋯</button></small>${esc(m.body)}</div></div>`;
+  }).join('');
+}
+
+function renderCarpoolMessages() {
+  const list = document.getElementById('carpoolMessageList');
+  if (!list || !state.carpoolId) return;
+  list.innerHTML = carpoolMessagesHTML(state.carpoolId);
+  list.scrollTop = list.scrollHeight;
+}
+
+function carpoolMessageMenuHTML(m) {
+  const mine = m.sender_id === state.session.user.id;
+  const c = state.carpools.find((x) => x.id === m.carpool_id);
+  const name = carpoolSenderName(m.carpool_id, m.sender_id);
+  return `<span class="eyebrow">CARPOOL MESSAGE</span><h2>${mine ? 'Your message' : `From ${esc(name)}`}</h2><p class="subtitle">${esc(m.body.length > 140 ? `${m.body.slice(0, 140)}…` : m.body)}</p>
+    ${mine ? '' : `<form class="form" data-form="carpool-report"><input type="hidden" name="id" value="${m.id}"><label>Report this message<textarea name="reason" maxlength="500" placeholder="What’s wrong with it? (optional)"></textarea></label><small class="hint">Reports go to the SIDLNE team and are reviewed within 24 hours. The message is hidden for you right away.</small><button class="primary full" type="submit">Report message</button></form>`}
+    <div class="row-actions">${!mine && m.sender_id ? `<button class="danger-btn" data-action="block-user" data-id="${m.sender_id}" data-name="${esc(name)}">Block ${esc(name)}</button>` : ''}${mine || (c && ownsCarpool(c)) ? `<button class="danger-btn" data-action="delete-carpool-message" data-id="${m.id}">Delete message</button>` : ''}</div>`;
 }
 
 function carpoolPageHTML() {
@@ -1164,10 +1205,13 @@ function carpoolPageHTML() {
     : `<div class="empty"><h3>No events in the next ${CARPOOL_DAYS} days.</h3><p>Events from the team’s calendar show up here automatically.</p></div>`;
   return `<button class="link-btn" data-action="close-carpool">← All rides</button>
     <div class="carpool-head"><div><span class="eyebrow">CARPOOL</span><h2>🚙 ${esc(c.name)}</h2><p class="subtitle">Next ${CARPOOL_DAYS} days${c.event_filter ? ` · only “${esc(c.event_filter)}” events` : ''} · <span class="pill ${open ? 'warn' : 'ok'}">${open ? `${open} ${open === 1 ? 'DRIVE' : 'DRIVES'} OPEN` : 'ALL COVERED'}</span></p></div>
-      <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-import" data-id="${c.id}">📄 Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button>${ownsCarpool(c) ? `<button class="outline" data-action="edit-carpool" data-id="${c.id}">✏️ Edit carpool</button>` : ''}</div></div>
+      <div class="row-actions"><button class="primary" data-action="carpool-autofill" data-id="${c.id}">⚡ Auto-assign drivers</button><button class="outline" data-action="share-carpool" data-id="${c.id}">Invite parents</button><button class="outline" data-action="carpool-chat">💬 Chat</button><button class="outline" data-action="carpool-import" data-id="${c.id}">📄 Import Google Sheet</button><button class="outline" data-action="carpool-export" data-id="${c.id}">Export</button>${ownsCarpool(c) ? `<button class="outline" data-action="edit-carpool" data-id="${c.id}">✏️ Edit carpool</button>` : ''}</div></div>
     <div class="section"><div class="section-head"><h2>Drivers</h2><div class="head-actions">${me ? `<button class="link-btn" data-action="carpool-me" data-id="${c.id}">Edit my info</button>` : `<button class="outline" data-action="carpool-me" data-id="${c.id}">＋ Add me as a driver</button>`}${ownsCarpool(c) ? `<button class="link-btn" data-action="carpool-add-parent" data-id="${c.id}">＋ Add a parent</button>` : ''}</div></div>
       <div class="athlete-chips">${members.length ? members.map((m) => `<span class="athlete-chip">${esc(m.name)}${m.seats != null ? ` · ${m.seats} ${m.seats === 1 ? 'seat' : 'seats'}` : ''}${m.phone ? ` · <a href="tel:${esc(m.phone.replace(/[^\d+]/g, ''))}">${esc(m.phone)}</a>` : ''}${m.profile_id ? '' : ` <small class="sub">(not joined)</small> <button class="link-btn" data-action="carpool-claim" data-id="${m.id}">That’s me</button>`}</span>`).join('') : '<p class="subtitle">No drivers yet. Invite the other parents.</p>'}</div></div>
     <div class="panel carpool-grid">${rows}</div>
+    <div class="section" id="carpoolChat"><div class="section-head"><h2>💬 Carpool chat</h2></div>
+      <div class="panel carpool-chat"><div class="message-list" id="carpoolMessageList">${carpoolMessagesHTML(c.id)}</div>
+      <form class="compose" data-form="carpool-message" data-id="${c.id}"><input name="body" placeholder="Message the carpool…" aria-label="Message the carpool" maxlength="2000" autocomplete="off" required><button class="primary" type="submit">Send</button></form></div></div>
     ${ownsCarpool(c) ? `<div class="row-actions"><button class="danger-btn" data-action="delete-carpool" data-id="${c.id}">Delete carpool</button></div>` : me ? `<div class="row-actions"><button class="danger-btn" data-action="leave-carpool" data-id="${c.id}">Leave carpool</button></div>` : ''}`;
 }
 
@@ -1506,11 +1550,11 @@ async function loadChatSafety() {
   const me = state.session.user.id;
   const [blocked, reports] = await Promise.all([
     supabase.from('blocked_users').select('blocked_id').eq('blocker_id', me),
-    supabase.from('message_reports').select('message_id').eq('reporter_id', me),
+    supabase.from('message_reports').select('message_id, carpool_message_id').eq('reporter_id', me),
   ]);
   if (blocked.error || reports.error) console.warn('Chat safety unavailable:', (blocked.error || reports.error).message);
   state.blocked = new Set((blocked.data || []).map((b) => b.blocked_id));
-  state.reported = new Set((reports.data || []).map((r) => r.message_id).filter(Boolean));
+  state.reported = new Set((reports.data || []).flatMap((r) => [r.message_id, r.carpool_message_id]).filter(Boolean));
 }
 
 // A short list of slurs and obscenities that can't be posted in family chat
@@ -1883,12 +1927,18 @@ const actions = {
     await busy(null, async () => { state.household.invite_code = must(await supabase.rpc('rotate_invite_code', { hid: state.household.id })); renderMain(); toast('New invite code ready'); });
   },
   'message-menu': (el) => { const m = byId(state.messages, el.dataset.id); if (m) showModal(messageMenuHTML(m)); },
+  'carpool-chat': () => { document.getElementById('carpoolChat')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); document.querySelector('[data-form=carpool-message] input')?.focus({ preventScroll: true }); },
+  'carpool-message-menu': (el) => { const m = byId(state.carpoolMessages, el.dataset.id); if (m) showModal(carpoolMessageMenuHTML(m)); },
+  'delete-carpool-message': async (el) => {
+    if (!confirm('Delete this message for everyone in the carpool?')) return;
+    await busy(null, async () => { must(await supabase.from('carpool_messages').delete().eq('id', el.dataset.id)); if (state.carpoolId) await loadCarpoolMessages(state.carpoolId); closeModal(); renderCarpoolMessages(); toast('Message deleted'); });
+  },
   'block-user': async (el) => {
-    if (!confirm(`Block ${memberName(el.dataset.id)}? You won’t see their messages. You can unblock them under Family.`)) return;
+    if (!confirm(`Block ${el.dataset.name || memberName(el.dataset.id)}? You won’t see their messages. You can unblock them under Family.`)) return;
     await busy(null, async () => {
       must(await supabase.from('blocked_users').upsert({ blocker_id: state.session.user.id, blocked_id: el.dataset.id }));
       state.blocked.add(el.dataset.id);
-      closeModal(); renderMessages(); toast('Blocked. You won’t see their messages.');
+      closeModal(); renderMessages(); renderCarpoolMessages(); toast('Blocked. You won’t see their messages.');
     });
   },
   'unblock-user': (el) => busy(null, async () => {
@@ -2150,6 +2200,25 @@ const forms = {
     await reload('messages');
     renderMessages();
     form.querySelector('input').focus();
+  },
+  'carpool-message': async (f, form) => {
+    const body = f.get('body').trim();
+    if (!body) return;
+    if (isObjectionable(body)) { toast('That message has language that isn’t allowed in SIDLNE chat.'); return; }
+    form.reset();
+    const cid = form.dataset.id;
+    must(await supabase.from('carpool_messages').insert({ carpool_id: cid, sender_id: state.session.user.id, body }));
+    await loadCarpoolMessages(cid);
+    renderCarpoolMessages();
+    form.querySelector('input').focus();
+  },
+  'carpool-report': async (f) => {
+    const m = byId(state.carpoolMessages, f.get('id'));
+    if (!m) return;
+    const c = state.carpools.find((x) => x.id === m.carpool_id);
+    must(await supabase.from('message_reports').insert({ carpool_id: m.carpool_id, carpool_message_id: m.id, household_id: c.household_id, reporter_id: state.session.user.id, sender_id: m.sender_id, body: m.body, reason: f.get('reason').trim() || null }));
+    state.reported.add(m.id);
+    closeModal(); renderCarpoolMessages(); toast('Thanks. The SIDLNE team will review it within 24 hours.');
   },
   report: async (f) => {
     const m = byId(state.messages, f.get('id'));

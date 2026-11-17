@@ -487,3 +487,5 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .form-grid>label,.game-row>label{min-width:0}
 .form-grid input,.game-row input{min-width:0;max-width:100%}
 .game-row input{padding-left:10px;padding-right:8px}
+.carpool-chat{padding:14px 16px}
+.carpool-chat .message-list{max-height:50vh;overflow-y:auto}
