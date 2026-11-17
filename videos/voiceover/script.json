@@ -2,17 +2,53 @@
   "voice": "af_heart",
   "speed": 1.06,
   "lines": [
-    { "id": "01-intro", "text": "Raise your hand if the fridge calendar has officially given up. Same. Meet Sideline. Every kid, every team, every game. One app." },
-    { "id": "02-overview", "text": "Open it, and boom. What's next, where, and who's driving. One tap for directions, one tap for the hype playlist. Warm ups start in the minivan." },
-    { "id": "03-calendar", "text": "Every kid on one calendar, color coded. Flip to the month, or filter to just the one with three practices on a Tuesday." },
-    { "id": "04-teams", "text": "Stop typing in schedules like it's two thousand nine. Paste your TeamSnap, SportsEngine, or GameChanger link, and the whole season fills itself in." },
-    { "id": "05-alerts", "text": "Coach moves practice at nine p.m.? Your phone tells you. No digging through a hundred group texts." },
-    { "id": "06-add-event", "text": "Picture day. Team party. The orthodontist. If it's not on a team calendar, just add it." },
-    { "id": "07-tournament", "text": "Tournament weekend? Tap Add tournament, drop in every game at once, and get back to your iced coffee." },
-    { "id": "08-rides", "text": "Who's got pickup? Tap I'll drive, and everyone knows. No more, wait, I thought you had them." },
-    { "id": "09-carpool", "text": "Carpooling with the team? Invite the parents, bring in that messy Google Sheet, and tap Auto assign. Fair drives for everyone. Nobody's the full time minivan Uber." },
-    { "id": "10-carpool-chat", "text": "Running late? Tag Jen in the carpool chat, and her phone buzzes. She knows before she's stuck in the pickup line." },
-    { "id": "11-family", "text": "Family chat keeps the whole house in the loop. Add your partner, grandma, the sitter. Everyone on the same page. Finally." },
-    { "id": "12-outro", "text": "Sideline. Every sport, one place. Set it up once, and your husband will never ask you what time practice is again. Or where the game is. Ever. You're welcome." }
+    {
+      "id": "01-intro",
+      "text": "Raise your hand if the fridge calendar has officially given up. Same. Meet Sideline. Every kid, every team, every game. One app."
+    },
+    {
+      "id": "02-overview",
+      "text": "Open it, and boom. What's next, where, and who's driving. One tap for directions, one tap for the hype playlist. Warm ups start on the drive over."
+    },
+    {
+      "id": "03-calendar",
+      "text": "Every kid on one calendar, color coded. Flip to the month, or filter to just the one with three practices on a Tuesday."
+    },
+    {
+      "id": "04-teams",
+      "text": "Stop typing in schedules like it's two thousand nine. Paste your TeamSnap, SportsEngine, or GameChanger link, and the whole season fills itself in."
+    },
+    {
+      "id": "05-alerts",
+      "text": "Coach moves practice at nine p.m.? Your phone tells you. No digging through a hundred group texts."
+    },
+    {
+      "id": "06-add-event",
+      "text": "Picture day. Team party. The orthodontist. If it's not on a team calendar, just add it."
+    },
+    {
+      "id": "07-tournament",
+      "text": "Tournament weekend? Tap Add tournament, drop in every game at once, and get back to your iced coffee."
+    },
+    {
+      "id": "08-rides",
+      "text": "Who's got pickup? Tap I'll drive, and everyone knows. No more, wait, I thought you had them."
+    },
+    {
+      "id": "09-carpool",
+      "text": "Carpooling with the team? Invite the parents, tap Auto assign, or load it from your Google Sheet or the team calendar. Then switch it up any time Casey, Ali, Jill, Jason, Logan, or anyone else in the carpool crew has a last minute change. Nobody's the full time Uber."
+    },
+    {
+      "id": "10-carpool-chat",
+      "text": "Running late? Tag Jen in the carpool chat, and her phone buzzes. She knows before she's stuck in the pickup line."
+    },
+    {
+      "id": "11-family",
+      "text": "Family chat keeps the whole house in the loop. Add your partner, grandma, the sitter. Everyone on the same page. Finally."
+    },
+    {
+      "id": "12-outro",
+      "text": "Sideline. Every sport, one place. Set it up once, and your husband, your kids, or your wife will never ask you what time practice is again. Or where the game is. Ever. You're welcome."
+    }
   ]
 }
