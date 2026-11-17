@@ -22,7 +22,7 @@ jobs:
         run: |
           set -u
           fail=0
-          for path in / /welcome/ /config.js /icons/share-card.png; do
+          for path in / /welcome/ /video/ /videos/sidlne-how-to.mp4 /config.js /icons/share-card.png; do
             code=$(curl -sS -o /tmp/body -w '%{http_code}' -L --max-time 20 "https://sidlne.app$path" || echo 000)
             echo "https://sidlne.app$path -> HTTP $code"
             [ "$code" = 200 ] || fail=1
