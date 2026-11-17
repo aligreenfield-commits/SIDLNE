@@ -1168,8 +1168,19 @@ function carpoolMessagesHTML(cid) {
     const name = carpoolSenderName(cid, m.sender_id);
     const when = new Date(m.inserted_at);
     const stamp = key(when) === key(new Date()) ? fmtTime(when) : `${fmtDate(when)} · ${fmtTime(when)}`;
-    return `<div class="message ${m.sender_id === me ? 'mine' : ''}"><span class="avatar">${initials(name)}</span><div class="bubble"><small>${esc(name)} · ${esc(stamp)}<button class="msg-more" data-action="carpool-message-menu" data-id="${m.id}" aria-label="Message options: report, block or delete">⋯</button></small>${esc(m.body)}</div></div>`;
+    return `<div class="message ${m.sender_id === me ? 'mine' : ''}"><span class="avatar">${initials(name)}</span><div class="bubble"><small>${esc(name)} · ${esc(stamp)}<button class="msg-more" data-action="carpool-message-menu" data-id="${m.id}" aria-label="Message options: report, block or delete">⋯</button></small>${withMentions(cid, m.body)}</div></div>`;
   }).join('');
+}
+
+// "@Ganis" and "@everyone" in bold, for names in this carpool
+function withMentions(cid, text) {
+  let html = esc(text);
+  const names = state.carpoolMembers.filter((m) => m.carpool_id === cid).map((m) => m.name).concat(['everyone', 'all']).sort((a, b) => b.length - a.length);
+  for (const n of names) {
+    const re = new RegExp(`@${esc(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w])`, 'gi');
+    html = html.replace(re, (m) => `<b class="mention">${m}</b>`);
+  }
+  return html;
 }
 
 function renderCarpoolMessages() {
@@ -1177,6 +1188,20 @@ function renderCarpoolMessages() {
   if (!list || !state.carpoolId) return;
   list.innerHTML = carpoolMessagesHTML(state.carpoolId);
   list.scrollTop = list.scrollHeight;
+}
+
+// Phone alerts for the parents a message @mentions (the server checks who's in the carpool)
+async function alertMentions(messageId) {
+  try {
+    const { data, error } = await supabase.functions.invoke('sync-calendar', { body: { carpool_message_id: messageId } });
+    if (error || !data) return;
+    const list = (a) => a.join(', ');
+    const parts = [];
+    if (data.alerted?.length) parts.push(`Alerted ${list(data.alerted)}`);
+    if (data.no_phone?.length) parts.push(`${list(data.no_phone)} ${data.no_phone.length === 1 ? 'hasn’t' : 'haven’t'} turned on SIDLNE notifications`);
+    if (data.not_joined?.length) parts.push(`${list(data.not_joined)} ${data.not_joined.length === 1 ? 'hasn’t' : 'haven’t'} joined SIDLNE yet`);
+    if (parts.length) toast(parts.join('. '));
+  } catch (err) { console.warn('Could not send alerts', err); }
 }
 
 function carpoolMessageMenuHTML(m) {
@@ -1211,6 +1236,7 @@ function carpoolPageHTML() {
     <div class="panel carpool-grid">${rows}</div>
     <div class="section" id="carpoolChat"><div class="section-head"><h2>💬 Carpool chat</h2></div>
       <div class="panel carpool-chat"><div class="message-list" id="carpoolMessageList">${carpoolMessagesHTML(c.id)}</div>
+      <div class="mention-chips"><span>Alert:</span>${members.filter((m) => m.id !== me?.id).map((m) => `<button type="button" data-action="mention" data-name="${esc(m.name)}">@${esc(m.name)}</button>`).join('')}<button type="button" data-action="mention" data-name="everyone">@everyone</button></div>
       <form class="compose" data-form="carpool-message" data-id="${c.id}"><input name="body" placeholder="Message the carpool…" aria-label="Message the carpool" maxlength="2000" autocomplete="off" required><button class="primary" type="submit">Send</button></form></div></div>
     ${ownsCarpool(c) ? `<div class="row-actions"><button class="danger-btn" data-action="delete-carpool" data-id="${c.id}">Delete carpool</button></div>` : me ? `<div class="row-actions"><button class="danger-btn" data-action="leave-carpool" data-id="${c.id}">Leave carpool</button></div>` : ''}`;
 }
@@ -1696,6 +1722,10 @@ async function openFromPush(info) {
       await selectHousehold(info.household_id);
       renderApp();
     }
+    if (info.kind === 'carpool' && info.carpool_id) {
+      await loadCarpools();
+      if (state.carpools.some((c) => c.id === info.carpool_id)) { await openCarpool(info.carpool_id); setTimeout(() => actions['carpool-chat'](), 300); return; }
+    }
     if (info.event_id && state.events.some((e) => e.id === info.event_id)) { go('Calendar'); openEvent(info.event_id); }
     else go('Overview');
   } catch (err) { console.error(err); }
@@ -1927,6 +1957,13 @@ const actions = {
     await busy(null, async () => { state.household.invite_code = must(await supabase.rpc('rotate_invite_code', { hid: state.household.id })); renderMain(); toast('New invite code ready'); });
   },
   'message-menu': (el) => { const m = byId(state.messages, el.dataset.id); if (m) showModal(messageMenuHTML(m)); },
+  mention: (el) => {
+    const input = document.querySelector('[data-form=carpool-message] input');
+    if (!input) return;
+    const tag = `@${el.dataset.name} `;
+    input.value = input.value && !/\s$/.test(input.value) ? `${input.value} ${tag}` : `${input.value}${tag}`;
+    input.focus();
+  },
   'carpool-chat': () => { document.getElementById('carpoolChat')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); document.querySelector('[data-form=carpool-message] input')?.focus({ preventScroll: true }); },
   'carpool-message-menu': (el) => { const m = byId(state.carpoolMessages, el.dataset.id); if (m) showModal(carpoolMessageMenuHTML(m)); },
   'delete-carpool-message': async (el) => {
@@ -2207,10 +2244,11 @@ const forms = {
     if (isObjectionable(body)) { toast('That message has language that isn’t allowed in SIDLNE chat.'); return; }
     form.reset();
     const cid = form.dataset.id;
-    must(await supabase.from('carpool_messages').insert({ carpool_id: cid, sender_id: state.session.user.id, body }));
+    const sent = must(await supabase.from('carpool_messages').insert({ carpool_id: cid, sender_id: state.session.user.id, body }).select('id').single());
     await loadCarpoolMessages(cid);
     renderCarpoolMessages();
     form.querySelector('input').focus();
+    if (body.includes('@')) alertMentions(sent.id);
   },
   'carpool-report': async (f) => {
     const m = byId(state.carpoolMessages, f.get('id'));

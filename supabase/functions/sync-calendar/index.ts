@@ -12,6 +12,9 @@
 // Carpool import: reads a shared Google Sheet as CSV for a signed-in user.
 //   POST { "sheet_url": "https://docs.google.com/spreadsheets/d/…" }  ->  { "csv": "…" }
 //
+// Carpool chat @mentions: alerts the phones of the parents named in a message.
+//   POST { "carpool_message_id": "<uuid>" }  ->  { "alerted": [names], "not_joined": [names], "no_phone": [names] }
+//
 // Sorting a shared calendar: lists the event names in a link for a signed-in user.
 //   POST { "preview_url": "webcal://…" }  ->  { "names": [{ pattern, title, count, next }] }
 
@@ -22,6 +25,7 @@ import { changeMessage, type ChangeRow } from "./notify.ts";
 import { apnsConfigured, sendPush } from "./apns.ts";
 import { fetchSheetCsv } from "./sheets.ts";
 import { belongsTo, linkKey, normTitle, unsortedTitles } from "./sorting.ts";
+import { findMentions, type Member } from "./mentions.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -67,7 +71,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  let body: { team_id?: string; sheet_url?: string; preview_url?: string } = {};
+  let body: { team_id?: string; sheet_url?: string; preview_url?: string; carpool_message_id?: string } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
@@ -95,6 +99,11 @@ Deno.serve(async (req) => {
   if (body.sheet_url) {
     const sheet = await fetchSheetCsv(body.sheet_url);
     return "csv" in sheet ? json(sheet) : json({ error: sheet.error }, sheet.status);
+  }
+
+  if (body.carpool_message_id) {
+    const r = await notifyMentions(supabase, auth.user.id, body.carpool_message_id);
+    return "error" in r ? json({ error: r.error }, r.status) : json(r);
   }
 
   if (body.preview_url) {
@@ -337,6 +346,50 @@ function eventNames(events: IcsEvent[]) {
     .sort((a, b) => (a.next ? Date.parse(a.next) : Infinity) - (b.next ? Date.parse(b.next) : Infinity) || b.last - a.last)
     .slice(0, 300)
     .map(({ last: _last, ...n }) => n);
+}
+
+// Carpool chat: alert the parents a message @mentions. The message is read with the
+// sender's own access (Row Level Security), so only a carpool member's own, fresh
+// message can trigger alerts, and only to people in that carpool.
+async function notifyMentions(supabase: SupabaseClient, userId: string, messageId: string) {
+  const { data: msg } = await supabase.from("carpool_messages").select("id, carpool_id, sender_id, body, inserted_at").eq("id", messageId).maybeSingle();
+  if (!msg) return { error: "Message not found", status: 404 };
+  if (msg.sender_id !== userId) return { error: "Only the sender can send alerts for a message", status: 403 };
+  if (Date.now() - Date.parse(msg.inserted_at) > 10 * 60_000) return { error: "That message is too old to send alerts for", status: 400 };
+  const [{ data: carpool }, { data: members }] = await Promise.all([
+    supabase.from("carpools").select("id, name").eq("id", msg.carpool_id).maybeSingle(),
+    supabase.from("carpool_members").select("name, profile_id").eq("carpool_id", msg.carpool_id),
+  ]);
+  const all = (members ?? []) as Member[];
+  const mentioned = findMentions(msg.body, all).filter((m) => m.profile_id !== userId);
+  const result = { alerted: [] as string[], not_joined: [] as string[], no_phone: [] as string[] };
+  if (!mentioned.length) return result;
+  result.not_joined = mentioned.filter((m) => !m.profile_id).map((m) => m.name);
+  const targets = mentioned.filter((m) => m.profile_id);
+  if (!targets.length) return result;
+  const db = admin();
+  let devices: { token: string; profile_id: string }[] = [];
+  if (apnsConfigured()) {
+    const { data } = await db.from("push_devices").select("token, profile_id").in("profile_id", targets.map((m) => m.profile_id!));
+    devices = data ?? [];
+  }
+  const sender = all.find((m) => m.profile_id === userId)?.name || "A parent";
+  const text = msg.body.length > 180 ? `${msg.body.slice(0, 179)}…` : msg.body;
+  const sent = new Set<string>();
+  const results = await Promise.all(devices.map(async (d) => {
+    const r = await sendPush(d.token, {
+      title: `🚗 ${carpool?.name || "Carpool"}`,
+      body: `${sender}: ${text}`,
+      threadId: `carpool-${msg.carpool_id}`,
+      data: { sidlne: { kind: "carpool", carpool_id: msg.carpool_id } },
+    });
+    if (r === "ok") sent.add(d.profile_id);
+    return [d.token, r] as const;
+  }));
+  const gone = results.filter(([, r]) => r === "gone").map(([t]) => t);
+  if (gone.length) await db.from("push_devices").delete().in("token", gone);
+  for (const m of targets) (sent.has(m.profile_id!) ? result.alerted : result.no_phone).push(m.name);
+  return result;
 }
 
 // Push the changes to every phone in the family
