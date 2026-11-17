@@ -1,9 +1,10 @@
 # Makes the narration for the how-to video (videos/voiceover) and commits the WAV
-# files back to the branch. Runs when the script changes, or by hand.
+# files back to the branch (never main). Runs when the script changes on a branch, or by hand.
 name: Video voiceover
 
 on:
   push:
+    branches-ignore: [main]
     paths:
       - "videos/voiceover/script.json"
       - "videos/voiceover/make-voice.mjs"
@@ -31,6 +32,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add videos/voiceover/out
+          git add -f videos/voiceover/out
           git commit -m "Voiceover WAVs for the how-to video" || exit 0
           git push
