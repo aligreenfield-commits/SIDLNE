@@ -63,7 +63,7 @@ jobs:
           # The npm package avoids setup-cli's rate-limited GitHub API lookup.
           # The function checks who is calling itself (a signed-in user, or the
           # database's scheduled job with its key), so the gateway JWT check is off.
-          npx --yes supabase@latest functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF" --use-api --no-verify-jwt
+          npx --yes supabase@latest functions deploy sync-calendar --project-ref "$SUPABASE_PROJECT_REF" --use-api --no-verify-jwt --yes
 
           # Apple push key for schedule-change notifications
           APNS_KEY_ID="$(printf '%s' "$APNS_KEY_ID" | tr -d '[:space:]')"
@@ -80,7 +80,7 @@ jobs:
           else
             umask 077
             printf 'APNS_KEY=%s\nAPNS_KEY_ID=%s\n' "$KEY_BODY" "$APNS_KEY_ID" > "$RUNNER_TEMP/apns.env"
-            npx --yes supabase@latest secrets set --env-file "$RUNNER_TEMP/apns.env" --project-ref "$SUPABASE_PROJECT_REF"
+            npx --yes supabase@latest secrets set --env-file "$RUNNER_TEMP/apns.env" --project-ref "$SUPABASE_PROJECT_REF" --yes
             rm -f "$RUNNER_TEMP/apns.env"
             echo "::notice::Push notifications are on (Apple key $APNS_KEY_ID)."
           fi
