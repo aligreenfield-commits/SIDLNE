@@ -62,7 +62,20 @@ def api(method, path, body = nil, ok_missing: false)
     req["Content-Type"] = "application/json"
     req.body = body.to_json
   end
-  res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", read_timeout: 120) { |h| h.request(req) }
+  attempts = 0
+  begin
+    attempts += 1
+    res = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https", read_timeout: 120) { |h| h.request(req) }
+    # Apple intermittently returns 5xx; retry only idempotent reads
+    raise IOError, "HTTP #{res.code}" if method == :get && res.code.start_with?("5")
+  rescue IOError, SystemCallError, Timeout::Error, OpenSSL::SSL::SSLError => e
+    if method == :get && attempts < 5
+      warn "Retrying GET #{uri.path} after #{e.message} (attempt #{attempts})"
+      sleep(2**attempts)
+      retry
+    end
+    raise unless e.message.start_with?("HTTP ")
+  end
   return nil if ok_missing && res.code == "404"
   raise ApiError.new(res.code, res.body, "#{method.upcase} #{uri.path}") unless res.code.start_with?("2")
   res.body.to_s.empty? ? {} : JSON.parse(res.body)
