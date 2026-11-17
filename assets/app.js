@@ -389,7 +389,7 @@ function renderApp() {
     <div class="shell">
       <header class="topbar"><div class="crumb">${esc(state.household.name)} <b>/</b> <span id="crumb"></span></div><div class="top-actions"><span class="live" id="live"><i></i>Synced</span><button class="avatar" data-action="go" data-tab="Family" aria-label="Family settings">${initials(me)}</button></div></header>
       <main class="content">
-        <div class="page-head"><div><div class="eyebrow">${esc(new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase())}</div><h1 id="pageTitle"></h1><div class="subtitle" id="pageSubtitle"></div></div><button class="primary" data-action="add-event">＋ Add event</button></div>
+        <div class="page-head"><div><div class="eyebrow">${esc(new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase())}</div><h1 id="pageTitle"></h1><div class="subtitle" id="pageSubtitle"></div></div><div class="head-buttons"><button class="primary" data-action="add-event">＋ Add event</button><button class="outline" data-action="add-tournament">🏆 Add tournament</button></div></div>
         <div id="main"></div>
         <footer><span>SIDLNE / EVERY SPORT. ONE PLACE.</span><span class="footer-links"><a href="install.html">INSTALL</a><a href="privacy.html">PRIVACY</a><a href="support.html">SUPPORT</a></span></footer>
       </main>
