@@ -1,0 +1,36 @@
+# Makes the narration for the how-to video (videos/voiceover) and commits the WAV
+# files back to the branch. Runs when the script changes, or by hand.
+name: Video voiceover
+
+on:
+  push:
+    paths:
+      - "videos/voiceover/script.json"
+      - "videos/voiceover/make-voice.mjs"
+      - ".github/workflows/voiceover.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  voice:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Make the narration
+        working-directory: videos/voiceover
+        run: |
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund kokoro-js@1.2.1
+          node make-voice.mjs
+      - name: Commit the WAV files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add videos/voiceover/out
+          git commit -m "Voiceover WAVs for the how-to video" || exit 0
+          git push

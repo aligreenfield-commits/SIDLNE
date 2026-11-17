@@ -1,0 +1,18 @@
+{
+  "voice": "af_heart",
+  "speed": 1.04,
+  "lines": [
+    { "id": "01-intro", "text": "Okay, sports moms. Three kids, six teams, and one very tired brain. Let's fix that. This is SIDLNE." },
+    { "id": "02-overview", "text": "Overview shows you what's up next. Tap Take me there for directions, or Game Day mix to get the car hyped. You're welcome, coach." },
+    { "id": "03-calendar", "text": "Calendar puts every kid on one schedule. Week or month, everybody or just one kid. Color coded, because we are organized now." },
+    { "id": "04-teams", "text": "Teams is where the magic happens. Paste the calendar link from TeamSnap, SportsEngine, LeagueApps, or GameChanger, and every game loads itself." },
+    { "id": "05-alerts", "text": "And when the coach moves practice at nine p.m.? Your phone tells you. Not the group text. Not the other moms. You." },
+    { "id": "06-add-event", "text": "Add event for the one offs. Picture day, the ortho, the team party nobody told you about." },
+    { "id": "07-tournament", "text": "Tournament weekend? Tap Add tournament, punch in every game at once, and you're done before your coffee gets cold." },
+    { "id": "08-rides", "text": "Rides. Somebody has to drive. Tap I'll drive, and everybody knows it's handled." },
+    { "id": "09-carpool", "text": "Sharing with other families? Start a carpool, invite the parents, even import your old Google Sheet. Then hit Auto assign. Fair and square. Nobody gets stuck with every Saturday." },
+    { "id": "10-carpool-chat", "text": "Running late? Type at Jen, running five minutes late, in the carpool chat, and her phone buzzes. Instantly. No more ten texts." },
+    { "id": "11-family", "text": "Family chat keeps the house in the loop. And under Family, invite your partner, grandma, the nanny. Whoever's on the roster." },
+    { "id": "12-outro", "text": "SIDLNE. Every sport, one place. Set it up once, and your husband will never ask you for the schedule again. Or their schedule. Ever. You're welcome." }
+  ]
+}
