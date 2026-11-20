@@ -497,3 +497,15 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .mention{color:#4c6125;background:#eef6d8;border-radius:4px;padding:0 3px}
 .mention-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:4px 0 10px;font-size:12px;color:var(--muted)}
 .mention-chips button{font-size:12px;font-weight:700;color:#4c6125;background:#f3f8e6;border:1px solid #d7e8ae;border-radius:999px;padding:5px 10px}
+/* Schedule changes: one slim line under Up Next */
+.changes-bar{display:flex;align-items:center;gap:6px;background:#fff7e6;border:1px solid #f0d9a8;border-radius:12px;margin:0 0 16px;padding:4px 6px 4px 14px}
+.changes-bar.has-cancelled{border-color:#ecc3b8;background:#fff3ef}
+.changes-open{flex:1;display:flex;align-items:center;gap:8px;text-align:left;font-size:14px;color:#6b4a00;padding:8px 0}
+.changes-bar.has-cancelled .changes-open{color:#9a3a24}
+.changes-open span{margin-left:auto;font-weight:700;font-size:13px}
+.changes-dismiss{color:#9a8a6a;font-size:14px;padding:8px 10px}
+.changes-list{list-style:none;margin:12px 0 18px;padding:0}
+.changes-list li{margin:10px 0;font-size:14px;line-height:1.4}
+.changes-list li i{font-style:normal;display:inline-block;width:24px}
+.changes-list .text-btn{text-align:left;font:inherit;color:inherit;padding:0}
+.changes-list .change-cancelled{color:#b4472f}
