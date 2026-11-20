@@ -505,7 +505,7 @@ function overviewHTML() {
       ${checkItem(state.events.length, 'Add or import events', state.teams.length ? 'go-teams' : 'add-event')}
       ${checkItem(state.members.length > 1, 'Invite your co-parent or family', 'invite')}</ul></div>`;
 
-  return `${changesBannerHTML()}${hero}<div class="main-grid"><div class="panel">${calendarPanelHTML()}</div><aside class="rail">${rail}</aside></div>`;
+  return `${hero}${changesBannerHTML()}<div class="main-grid"><div class="panel">${calendarPanelHTML()}</div><aside class="rail">${rail}</aside></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -554,14 +554,19 @@ function describeChange(c) {
 
 const CHANGE_ICONS = { time: '⏰', location: '📍', cancelled: '✕', added: '✨' };
 
+function changesListHTML(list) {
+  return `<ul class="changes-list">${list.slice(0, 50).map((c) => {
+    const text = `<i>${CHANGE_ICONS[c.kind] || '•'}</i>${esc(describeChange(c))}`;
+    return `<li class="change-${c.kind}">${c.event_id && byId(state.events, c.event_id) ? `<button class="text-btn" data-action="open-event" data-id="${c.event_id}">${text}</button>` : `<span>${text}</span>`}</li>`;
+  }).join('')}</ul>`;
+}
+
+// One slim line under Up Next; the full list opens on tap
 function changesBannerHTML() {
   const list = unseenChanges();
   if (!list.length) return '';
-  return `<div class="changes-banner"><div class="changes-head"><span class="eyebrow">SCHEDULE CHANGES</span><button class="link-btn" data-action="seen-changes">Got it</button></div>
-    <ul>${list.slice(0, state.allChanges ? 50 : 3).map((c) => {
-      const text = `<i>${CHANGE_ICONS[c.kind] || '•'}</i>${esc(describeChange(c))}`;
-      return `<li class="change-${c.kind}">${c.event_id && byId(state.events, c.event_id) ? `<button class="text-btn" data-action="open-event" data-id="${c.event_id}">${text}</button>` : `<span>${text}</span>`}</li>`;
-    }).join('')}</ul>${list.length > 3 && !state.allChanges ? `<button class="link-btn more" data-action="all-changes">+${list.length - 3} more</button>` : ''}</div>`;
+  const cancelled = list.some((c) => c.kind === 'cancelled');
+  return `<div class="changes-bar${cancelled ? ' has-cancelled' : ''}"><button class="changes-open" data-action="show-changes">🔔 <b>${list.length} schedule ${list.length === 1 ? 'change' : 'changes'}</b><span>See ${list.length === 1 ? 'it' : 'them'} ›</span></button><button class="changes-dismiss" data-action="seen-changes" aria-label="Dismiss schedule changes">✕</button></div>`;
 }
 
 // The most recent change to an event in the last week, for markers on the event itself
@@ -1910,6 +1915,8 @@ const actions = {
   },
   'seen-changes': () => { try { localStorage.setItem(changesSeenKey(), state.changes[0]?.created_at || new Date().toISOString()); } catch {} state.allChanges = false; renderMain(); },
   'all-changes': () => { state.allChanges = true; renderMain(); },
+  'show-changes': () => { const list = unseenChanges(); showModal(`<span class="eyebrow">SCHEDULE CHANGES</span><h2>What changed</h2>${list.length ? changesListHTML(list) : '<p>Nothing new.</p>'}<button class="primary full" data-action="seen-changes-close">Got it</button>`); },
+  'seen-changes-close': () => { actions['seen-changes'](); closeModal(); },
   'rsvp': (el) => busy(null, async () => { await setRsvp(el.dataset.event, el.dataset.athlete, el.dataset.status); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.event); }),
   'claim-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, true); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),
   'release-ride': (el) => busy(null, async () => { await claimRide(el.dataset.id, false); if (!document.getElementById('modalBg').classList.contains('hidden')) openEvent(el.dataset.id); }),
