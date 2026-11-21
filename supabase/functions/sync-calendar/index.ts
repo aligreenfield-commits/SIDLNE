@@ -15,6 +15,9 @@
 // Carpool chat @mentions: alerts the phones of the parents named in a message.
 //   POST { "carpool_message_id": "<uuid>" }  ->  { "alerted": [names], "not_joined": [names], "no_phone": [names] }
 //
+// Family calendar feed (Skylight, Google Calendar, Apple Calendar subscribe to it):
+//   GET ?feed=<households.feed_token>  ->  text/calendar
+//
 // Sorting a shared calendar: lists the event names in a link for a signed-in user.
 //   POST { "preview_url": "webcal://…" }  ->  { "names": [{ pattern, title, count, next }] }
 
@@ -26,6 +29,7 @@ import { apnsConfigured, sendPush } from "./apns.ts";
 import { fetchSheetCsv } from "./sheets.ts";
 import { belongsTo, linkKey, normTitle, unsortedTitles } from "./sorting.ts";
 import { findMentions, type Member } from "./mentions.ts";
+import { buildIcs, type FeedEvent } from "./feed.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -69,6 +73,10 @@ const admin = () =>
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method === "GET" || req.method === "HEAD") {
+    const token = new URL(req.url).searchParams.get("feed");
+    if (token) return familyFeed(token, req.method === "HEAD");
+  }
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   let body: { team_id?: string; sheet_url?: string; preview_url?: string; carpool_message_id?: string } = {};
@@ -390,6 +398,43 @@ async function notifyMentions(supabase: SupabaseClient, userId: string, messageI
   if (gone.length) await db.from("push_devices").delete().in("token", gone);
   for (const m of targets) (sent.has(m.profile_id!) ? result.alerted : result.no_phone).push(m.name);
   return result;
+}
+
+// The family's schedule as an iCal feed. The token is long and random, and only
+// family members can see it (and reset it) in the app.
+async function familyFeed(token: string, headOnly: boolean): Promise<Response> {
+  const notFound = () => new Response("Calendar not found", { status: 404, headers: { "Content-Type": "text/plain" } });
+  if (!/^[a-f0-9]{24,64}$/.test(token)) return notFound();
+  const db = admin();
+  const { data: family } = await db.from("households").select("id, name").eq("feed_token", token).maybeSingle();
+  if (!family) return notFound();
+  const from = new Date(Date.now() - 60 * 864e5).toISOString();
+  const to = new Date(Date.now() + 400 * 864e5).toISOString();
+  const [events, athletes, teams, rides] = await Promise.all([
+    db.from("events").select("id, title, start, end, location, description, athlete_id, team_id")
+      .eq("household_id", family.id).gte("start", from).lte("start", to).order("start").limit(3000),
+    db.from("athletes").select("id, name").eq("household_id", family.id),
+    db.from("teams").select("id, name, athlete_id").eq("household_id", family.id),
+    db.from("rides").select("event_id, driver_profile_id, events!inner(household_id)").eq("events.household_id", family.id).not("driver_profile_id", "is", null),
+  ]);
+  const driverIds = [...new Set((rides.data ?? []).map((r) => r.driver_profile_id as string))];
+  const { data: drivers } = driverIds.length ? await db.from("profiles").select("id, display_name").in("id", driverIds) : { data: [] };
+  const athleteName = new Map((athletes.data ?? []).map((a) => [a.id, a.name as string]));
+  const team = new Map((teams.data ?? []).map((t) => [t.id, t]));
+  const driverName = new Map((drivers ?? []).map((d) => [d.id, (d.display_name as string) || "Someone"]));
+  const rideDriver = new Map((rides.data ?? []).map((r) => [r.event_id, driverName.get(r.driver_profile_id as string) ?? null]));
+  const list: FeedEvent[] = (events.data ?? []).map((e) => {
+    const t = e.team_id ? team.get(e.team_id) : undefined;
+    return {
+      id: e.id, title: e.title || "Event", start: e.start, end: e.end, location: e.location, description: e.description,
+      athlete: athleteName.get(e.athlete_id ?? t?.athlete_id) ?? null, team: t?.name ?? null, driver: rideDriver.get(e.id) ?? null,
+    };
+  });
+  const body = buildIcs(family.name, list);
+  return new Response(headOnly ? null : body, {
+    status: 200,
+    headers: { ...cors, "Content-Type": "text/calendar; charset=utf-8", "Cache-Control": "max-age=900", "Content-Disposition": 'inline; filename="sidlne.ics"' },
+  });
 }
 
 // Push the changes to every phone in the family

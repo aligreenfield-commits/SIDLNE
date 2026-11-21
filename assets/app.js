@@ -160,6 +160,9 @@ async function selectHousehold(id) {
   try { localStorage.setItem(HOUSEHOLD_KEY, m.household_id); } catch {}
   await loadHouseholdData();
   subscribe();
+  // Calendar link (column added in migration 015; harmless if missing)
+  const { data: feed } = await supabase.from('households').select('feed_token').eq('id', m.household_id).maybeSingle();
+  if (state.household?.id === m.household_id && feed?.feed_token) state.household.feed_token = feed.feed_token;
 }
 
 // The family's events from `since` on, a page at a time (the API returns at most
@@ -1804,6 +1807,19 @@ function inviteLink() {
   return `${PUBLIC_URL}?join=${encodeURIComponent(state.household.invite_code)}`;
 }
 
+// Private calendar link for Skylight, Google Calendar and Apple Calendar
+function feedUrl() {
+  const t = state.household?.feed_token;
+  return t ? `${config.supabaseUrl}/functions/v1/sync-calendar?feed=${t}` : '';
+}
+function feedCardHTML() {
+  if (!state.household?.feed_token) return '';
+  return `<div class="section"><div class="section-head"><h2>Show on Skylight & other calendars</h2></div><div class="list-card feed-card" style="padding:20px 22px">
+    <p class="subtitle" style="margin-top:0">Put every kid’s games, practices, tournaments and drivers on your <strong>Skylight</strong> wall calendar, Google Calendar or Apple Calendar. It updates on its own.</p>
+    <div class="row-actions"><button class="primary" data-action="copy-feed">Copy calendar link</button>${NATIVE ? '' : `<a class="outline" href="${esc(feedUrl().replace(/^https:/, 'webcal:'))}">Add to Apple Calendar</a>`}<button class="outline" data-action="feed-help">How to add it</button></div>
+    <small class="hint">Private: anyone with this link can see your family’s schedule. <button class="text-btn" data-action="rotate-feed">Reset link</button></small></div></div>`;
+}
+
 function familyHTML() {
   const admin = ['owner', 'admin'].includes(state.role);
   const me = state.session.user.id;
@@ -1813,6 +1829,7 @@ function familyHTML() {
     <div class="section"><div class="section-head"><h2>Invite your family</h2></div><div class="list-card" style="padding:20px 22px"><p class="subtitle" style="margin-top:0">Share this code or link with a co-parent, grandparent or carpool partner. Anyone with it can join <strong>${esc(state.household.name)}</strong>.</p>
       <span class="code">${esc(state.household.invite_code)}</span>
       <div class="row-actions"><button class="primary" data-action="share-invite">Share invite link</button><button class="outline" data-action="copy-invite">Copy link</button>${admin ? '<button class="outline" data-action="rotate-code">Reset code</button>' : ''}</div></div></div>
+    ${feedCardHTML()}
     <div class="section"><div class="section-head"><h2>Members</h2></div><div class="list-card">${state.members.map((m) => `<div class="list-row"><span class="avatar">${initials(m.profiles?.display_name || m.profiles?.email)}</span><span class="grow"><strong>${esc(m.profiles?.display_name || 'Family member')}${m.profile_id === me ? ' (you)' : ''}</strong><span class="sub">${esc(m.profiles?.email || '')}</span></span><span class="pill">${esc(m.role.toUpperCase())}</span>${admin && m.profile_id !== me && m.role !== 'owner' ? `<button class="danger-btn" data-action="remove-member" data-id="${m.id}">Remove</button>` : ''}</div>`).join('')}</div></div>
   </div><aside class="rail">
     <div class="rail-card"><h2>Your profile</h2><form class="form" data-form="profile"><label>Display name<input name="display_name" required maxlength="60" value="${esc(state.profile?.display_name)}"></label><button class="outline" type="submit">Save</button></form>
@@ -1959,6 +1976,17 @@ const actions = {
     else copyText(url);
   },
   'copy-invite': () => copyText(inviteLink()),
+  'copy-feed': () => copyText(feedUrl()),
+  'feed-help': () => showModal(`<span class="eyebrow">CALENDAR LINK</span><h2>Show SIDLNE on your calendar</h2>
+    <p><strong>Skylight:</strong> in the Skylight app, open your calendar → <strong>Synced Calendars</strong> (or Sync) → <strong>Sync a new calendar</strong> → <strong>Calendar URL</strong> (or Other), paste the link and tap Sync.</p>
+    <p><strong>Google Calendar:</strong> on a computer, open calendar.google.com → Other calendars <strong>＋</strong> → <strong>From URL</strong>, paste the link and add it.</p>
+    <p><strong>Apple Calendar:</strong> Settings → Calendar → Accounts → Add Account → Other → <strong>Add Subscribed Calendar</strong>, paste the link.</p>
+    <p class="hint">Changes in SIDLNE show up there within about an hour. It’s read-only: edit events in SIDLNE.</p>
+    <button class="primary full" data-action="copy-feed">Copy calendar link</button>`),
+  'rotate-feed': async () => {
+    if (!confirm('Reset the calendar link? Calendars using the old link (like Skylight) stop updating until you add the new one.')) return;
+    await busy(null, async () => { state.household.feed_token = must(await supabase.rpc('rotate_feed_token', { hid: state.household.id })); renderMain(); toast('New calendar link ready'); });
+  },
   'rotate-code': async () => {
     if (!confirm('Reset the invite code? The old code and link will stop working.')) return;
     await busy(null, async () => { state.household.invite_code = must(await supabase.rpc('rotate_invite_code', { hid: state.household.id })); renderMain(); toast('New invite code ready'); });

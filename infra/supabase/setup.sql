@@ -1,6 +1,6 @@
 -- setup.sql: the complete SIDLNE database setup in one file.
 -- Paste into Supabase > SQL Editor and click Run. Safe to run again.
--- Generated from migrations/ (001-014); edit those, then regenerate with:
+-- Generated from migrations/ (001-015); edit those, then regenerate with:
 --   cat infra/supabase/migrations/*.sql > infra/supabase/setup.sql (keeping this header)
 -- 001_init_tables.sql
 --
@@ -979,5 +979,30 @@ begin
     alter publication supabase_realtime add table public.carpool_messages;
   end if;
 end $$;
+
+notify pgrst, 'reload schema';
+
+-- 015: a private calendar link for each family, so Skylight, Google Calendar or
+-- Apple Calendar can show the SIDLNE schedule (served by the sync-calendar
+-- function at ?feed=<token>). Family members can see and reset it.
+-- Idempotent: safe to run again.
+
+alter table public.households add column if not exists feed_token text
+  default encode(gen_random_bytes(18), 'hex');
+update public.households set feed_token = encode(gen_random_bytes(18), 'hex') where feed_token is null;
+create unique index if not exists idx_households_feed_token on public.households (feed_token);
+
+-- A new link (the old one stops working), for when it was shared by mistake
+create or replace function public.rotate_feed_token(hid uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  t text := encode(gen_random_bytes(18), 'hex');
+begin
+  if not public.is_household_member(hid) then raise exception 'Not in this family'; end if;
+  update public.households set feed_token = t where id = hid;
+  return t;
+end $$;
+revoke all on function public.rotate_feed_token(uuid) from public, anon;
+grant execute on function public.rotate_feed_token(uuid) to authenticated;
 
 notify pgrst, 'reload schema';
