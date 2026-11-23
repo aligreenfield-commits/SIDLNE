@@ -521,10 +521,9 @@ html.intro-boot #intro{display:flex}
 .intro-word,.intro-tag{position:absolute;top:50%;left:0;right:0;text-align:center;color:#fff;font-family:Inter,-apple-system,"SF Pro Display",sans-serif}
 .intro-word{margin-top:calc(150*var(--u));font-size:calc(150*var(--u));font-weight:800;letter-spacing:calc(26*var(--u));padding-left:calc(26*var(--u))}
 .intro-word span{display:inline-block;opacity:0;transform:translateY(.35em);filter:blur(10px);animation:intro-letter .85s calc(.75s + var(--i)*.13s) cubic-bezier(.2,.8,.2,1) forwards}
-.intro-tag{margin-top:calc(360*var(--u));font-size:calc(46*var(--u));font-weight:600;letter-spacing:calc(1*var(--u));color:#c9d0bd}
-.intro-plan{position:absolute;left:50%;top:50%;width:calc(1100*var(--u));height:calc(100*var(--u));margin:calc(240*var(--u)) 0 0 calc(-550*var(--u));animation:intro-plan-out 1s .35s ease-in forwards}
-@keyframes intro-plan-out{to{opacity:0;transform:translateY(calc(30*var(--u)))}}
-.intro-tag span{display:inline-block;opacity:0;transform:translateY(.4em);animation:intro-sentence 1.2s calc(1.8s + var(--j)*1s) cubic-bezier(.2,.8,.2,1) forwards}
+.intro-tag{margin-top:calc(385*var(--u));font-size:calc(44*var(--u));font-weight:700;letter-spacing:calc(12*var(--u));padding-left:calc(12*var(--u));color:#e9ece3}
+.intro-tag-lime{margin-top:calc(480*var(--u));color:#c6f35a}
+.intro-tag span{display:inline-block;opacity:0;transform:translateY(.4em);animation:intro-sentence 1.2s calc(1.9s + var(--j)*1.1s) cubic-bezier(.2,.8,.2,1) forwards}
 @keyframes intro-sentence{to{opacity:1;transform:none}}
 #intro.out{animation:intro-out .8s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none}
 @keyframes intro-rise{to{transform:translateY(calc(-170*var(--u))) scale(.82)}}
