@@ -23,7 +23,7 @@ const NATIVE = !!window.Capacitor?.isNativePlatform?.();
   let done = false;
   const close = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => { el.remove(); document.documentElement.classList.remove('intro-boot'); }, 850); };
   el.addEventListener('click', close);
-  setTimeout(close, matchMedia('(prefers-reduced-motion: reduce)').matches ? 700 : 5600);
+  setTimeout(close, matchMedia('(prefers-reduced-motion: reduce)').matches ? 700 : 7400);
 })();
 // The app never pinch-zooms: a zoomed-in view stays cut off at the sides
 if (NATIVE) document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover');
