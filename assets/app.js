@@ -12,6 +12,19 @@ const SPORT_ICONS = { Baseball: '⚾', Basketball: '🏀', 'Field Hockey': '🏑
 const HOUSEHOLD_KEY = 'sidlne-household';
 // Running inside the iPhone app (Capacitor) rather than a browser
 const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+
+// Opening animation: picks up exactly where the iPhone launch screen (black, S/)
+// leaves off, then reveals SIDLNE and opens into the app. Tap to skip.
+// Also playable on the web with ?intro=1.
+(function intro() {
+  const el = document.getElementById('intro');
+  if (!el) return;
+  if (!document.documentElement.classList.contains('intro-boot')) { el.remove(); return; }
+  let done = false;
+  const close = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => { el.remove(); document.documentElement.classList.remove('intro-boot'); }, 600); };
+  el.addEventListener('click', close);
+  setTimeout(close, matchMedia('(prefers-reduced-motion: reduce)').matches ? 700 : 2300);
+})();
 // The app never pinch-zooms: a zoomed-in view stays cut off at the sides
 if (NATIVE) document.querySelector('meta[name=viewport]')?.setAttribute('content', 'width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover');
 const Plugins = window.Capacitor?.Plugins || {};

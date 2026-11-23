@@ -509,3 +509,24 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 .changes-list li i{font-style:normal;display:inline-block;width:24px}
 .changes-list .text-btn{text-align:left;font:inherit;color:inherit;padding:0}
 .changes-list .change-cancelled{color:#b4472f}
+/* Opening animation (native app). Sizes follow the launch image: a 2732px square filling the screen */
+#intro{display:none}
+html.intro-boot,html.intro-boot body{background:#000}
+html.intro-boot #intro{display:flex}
+#intro{--u:calc(max(100vw,100vh)/2732);position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#intro::before{content:"";position:absolute;width:70vmax;height:70vmax;border-radius:50%;background:radial-gradient(circle,rgba(198,243,90,.16) 0%,rgba(198,243,90,0) 60%);opacity:0;animation:intro-glow 1.6s .25s ease-out forwards}
+.intro-mark{position:relative;width:calc(720*var(--u));height:calc(440*var(--u));animation:intro-rise .7s .15s cubic-bezier(.2,.8,.2,1) forwards}
+.intro-mark img{position:absolute;inset:0;width:100%;height:100%}
+.intro-slash{animation:intro-slash .9s .1s cubic-bezier(.2,.8,.2,1) both}
+.intro-word,.intro-tag{position:absolute;top:50%;left:0;right:0;text-align:center;color:#fff;font-family:Inter,-apple-system,"SF Pro Display",sans-serif}
+.intro-word{margin-top:calc(150*var(--u));font-size:calc(150*var(--u));font-weight:800;letter-spacing:calc(26*var(--u));padding-left:calc(26*var(--u))}
+.intro-word span{display:inline-block;opacity:0;transform:translateY(.35em);filter:blur(10px);animation:intro-letter .55s calc(.45s + var(--i)*.07s) cubic-bezier(.2,.8,.2,1) forwards}
+.intro-tag{margin-top:calc(370*var(--u));font-size:calc(42*var(--u));font-weight:700;letter-spacing:calc(16*var(--u));padding-left:calc(16*var(--u));color:#9aa38e;opacity:0;animation:intro-fade .6s 1.05s ease-out forwards}
+#intro.out{animation:intro-out .55s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none}
+@keyframes intro-rise{to{transform:translateY(calc(-170*var(--u))) scale(.82)}}
+@keyframes intro-slash{0%{filter:drop-shadow(0 0 0 rgba(198,243,90,0));transform:none}45%{filter:drop-shadow(0 0 calc(46*var(--u)) rgba(198,243,90,.95));transform:translateX(calc(6*var(--u))) skewX(-4deg)}100%{filter:drop-shadow(0 0 calc(14*var(--u)) rgba(198,243,90,.45));transform:none}}
+@keyframes intro-letter{to{opacity:1;transform:none;filter:none}}
+@keyframes intro-fade{to{opacity:1}}
+@keyframes intro-glow{0%{opacity:0;transform:scale(.6)}60%{opacity:1}100%{opacity:.7;transform:scale(1)}}
+@keyframes intro-out{to{opacity:0;transform:scale(1.08)}}
+@media (prefers-reduced-motion:reduce){#intro *,#intro::before{animation-duration:.01s!important;animation-delay:0s!important}}
