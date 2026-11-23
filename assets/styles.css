@@ -530,3 +530,8 @@ html.intro-boot #intro{display:flex}
 @keyframes intro-fade{to{opacity:1}}
 @keyframes intro-out{to{opacity:0;transform:scale(1.08)}}
 @media (prefers-reduced-motion:reduce){#intro *{animation-duration:.01s!important;animation-delay:0s!important}}
+/* Calendar: show the selected day, or every event in the week / month */
+.list-mode{display:flex;justify-content:center;padding:12px 16px 4px;border-top:1px solid var(--line)}
+.list-mode .segmented button{font-size:12px;padding:7px 14px}
+.period-count{padding:10px 22px 0;font-size:12px;font-weight:700;color:var(--muted)}
+.day-title.is-today{color:#4c6125}
