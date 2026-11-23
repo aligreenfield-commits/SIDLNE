@@ -31,6 +31,36 @@ const Plugins = window.Capacitor?.Plugins || {};
 // Links that leave the app (emails, invites) must point at the public site
 const PUBLIC_URL = NATIVE ? 'https://sidlne.app/' : location.origin + location.pathname;
 
+// Local sponsors: a small, clearly labeled card. The list lives in sponsors.json on
+// sidlne.app, so sponsors change without an app update. Nothing shows when it's empty.
+const SPONSORS_URL = 'https://sidlne.app/sponsors.json';
+const SPONSORS_KEY = 'sidlne-sponsors';
+let sponsors = (() => { try { return JSON.parse(localStorage.getItem(SPONSORS_KEY) || '[]'); } catch { return []; } })();
+async function loadSponsors() {
+  try {
+    const res = await fetch(SPONSORS_URL, { cache: 'no-cache' });
+    if (!res.ok) return;
+    const list = ((await res.json()).sponsors || []).filter((x) => x && x.active && x.name && /^https:\/\//.test(x.url || ''));
+    sponsors = list;
+    try { localStorage.setItem(SPONSORS_KEY, JSON.stringify(list)); } catch {}
+  } catch { /* offline: keep the last list */ }
+}
+function sponsorFor(placement) {
+  const list = sponsors.filter((x) => (x.placement || 'overview') === placement);
+  if (!list.length) return null;
+  return list[Math.floor(Date.now() / 864e5) % list.length]; // a different sponsor each day
+}
+function sponsorCardHTML() {
+  const sp = sponsorFor('overview');
+  if (!sp) return '';
+  const logo = /^https:\/\//.test(sp.logo || '') ? `<img src="${esc(sp.logo)}" alt="" loading="lazy">` : `<span class="sponsor-initial">${esc(sp.name.slice(0, 1))}</span>`;
+  return `<a class="sponsor-card" href="${esc(sp.url)}" target="_blank" rel="noopener sponsored">${logo}<span class="sponsor-text"><small>SPONSORED · LOCAL PARTNER</small><strong>${esc(sp.name)}</strong>${sp.tagline ? `<span>${esc(sp.tagline)}</span>` : ''}</span><i aria-hidden="true">›</i></a>`;
+}
+function gameDaySponsorHTML() {
+  const sp = sponsorFor('gameday');
+  return sp ? `<a class="gd-sponsor" href="${esc(sp.url)}" target="_blank" rel="noopener sponsored">Presented by <strong>${esc(sp.name)}</strong> · Sponsored</a>` : '';
+}
+
 const supabase = config.supabaseUrl && config.supabaseAnonKey
   ? createClient(config.supabaseUrl, config.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } })
   : null;
@@ -297,6 +327,7 @@ function subscribe() {
 // ---------------------------------------------------------------------------
 async function boot() {
   if (!supabase) return renderSetupNeeded();
+  loadSponsors().then(() => { if (state.session && state.tab === 'Overview') renderMain(); }).catch(() => {});
   const params = new URLSearchParams(location.search);
   const join = params.get('join');
   if (join) { try { sessionStorage.setItem('sidlne-join', join.toUpperCase()); } catch {} }
@@ -522,7 +553,7 @@ function overviewHTML() {
       ${checkItem(state.events.length, 'Add or import events', state.teams.length ? 'go-teams' : 'add-event')}
       ${checkItem(state.members.length > 1, 'Invite your co-parent or family', 'invite')}</ul></div>`;
 
-  return `${hero}${changesBannerHTML()}<div class="main-grid"><div class="panel">${calendarPanelHTML()}</div><aside class="rail">${rail}</aside></div>`;
+  return `${hero}${changesBannerHTML()}${sponsorCardHTML()}<div class="main-grid"><div class="panel">${calendarPanelHTML()}</div><aside class="rail">${rail}</aside></div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1574,7 +1605,7 @@ function gameDayModal(athleteId = '') {
     : `<div class="picks-head"><h3>SIDLNE pump-up picks</h3><span class="pill ok">CLEAN</span></div>
        <ol class="tracklist">${GAME_DAY_SONGS.map(([t, a], i) => `<li><a class="track" href="${esc(MUSIC[svc].search(`${t} ${a}`))}" target="_blank" rel="noopener"><span class="track-no">${String(i + 1).padStart(2, '0')}</span><span class="track-text"><strong>${esc(t)}</strong><small>${esc(a)}</small></span><i>▶</i></a></li>`).join('')}</ol>
        <div class="row-actions">${playLink(MUSIC[svc].search(`${sport ? sport + ' ' : ''}pump up clean`), `Find ${sport ? esc(sport.toLowerCase()) + ' ' : ''}pump-up playlists on ${MUSIC[svc].name}`)}<button class="link-btn" data-action="copy-songs">Copy song list</button></div>`;
-  showModal(`<div class="gd-stage"><span class="eyebrow">GAME DAY${athlete ? ' · ' + esc(athlete.name.toUpperCase()) : ''}</span><h2>Game Day mix ${eq}</h2><p>Get the car fired up on the way to the game. Play to win!</p></div>
+  showModal(`<div class="gd-stage"><span class="eyebrow">GAME DAY${athlete ? ' · ' + esc(athlete.name.toUpperCase()) : ''}</span><h2>Game Day mix ${eq}</h2><p>Get the car fired up on the way to the game. Play to win!</p>${gameDaySponsorHTML()}</div>
     <div class="segmented music-tabs">${Object.entries(MUSIC).map(([k, v]) => `<button class="${k === svc ? 'active' : ''}" data-action="music-service" data-service="${k}" data-athlete="${esc(athleteId)}">${v.name}</button>`).join('')}</div>
     <div class="section"><div class="section-head"><h3>Your family’s mixes</h3></div>
       <div class="mix-grid">${mine}${addTile}</div></div>
