@@ -61,6 +61,7 @@ const state = {
   playlists: [],
   tab: 'Overview',
   view: 'week',
+  showAll: (() => { try { return localStorage.getItem('sidlne-show-all') === '1'; } catch { return false; } })(),
   filter: 'all',
   selected: key(new Date()),
   monthCursor: firstOfMonth(new Date()),
@@ -610,8 +611,28 @@ function calendarPanelHTML() {
     <div class="calendar-tools"><div class="filters">${filters.map((a) => `<button class="${state.filter === a.id ? 'active' : ''}" data-action="filter" data-id="${a.id}">${a.color ? `<i class="dot" style="background:${esc(a.color)}"></i>` : ''}${esc(a.name)}</button>`).join('')}</div>
     <div class="period"><button data-action="period" data-dir="-1" aria-label="Previous">‹</button><strong>${esc(periodLabel())}</strong><button data-action="period" data-dir="1" aria-label="Next">›</button></div></div>
     ${state.view === 'week' ? weekHTML() : monthHTML()}
-    <div class="day-title">${esc(fmtLong(dateFromKey(state.selected)))}<span>${list.length} ${list.length === 1 ? 'event' : 'events'}</span></div>
-    <div>${list.length ? list.map(eventHTML).join('') : `<div class="empty"><h3>Nothing scheduled.</h3><p>Enjoy the day off, or <button class="text-btn" data-action="add-event" data-date="${state.selected}">add an event</button>.</p></div>`}</div>`;
+    <div class="list-mode"><div class="segmented small"><button data-action="show-all" data-all="0" class="${state.showAll ? '' : 'active'}">Selected day</button><button data-action="show-all" data-all="1" class="${state.showAll ? 'active' : ''}">All ${state.view === 'week' ? 'week' : 'month'}</button></div></div>
+    ${state.showAll ? periodListHTML() : `<div class="day-title">${esc(fmtLong(dateFromKey(state.selected)))}<span>${list.length} ${list.length === 1 ? 'event' : 'events'}</span></div>
+    <div>${list.length ? list.map(eventHTML).join('') : `<div class="empty"><h3>Nothing scheduled.</h3><p>Enjoy the day off, or <button class="text-btn" data-action="add-event" data-date="${state.selected}">add an event</button>.</p></div>`}</div>`}`;
+}
+
+// Every event in the week or month on screen, grouped by day
+function periodListHTML() {
+  let days;
+  if (state.view === 'week') {
+    const s = weekStart();
+    days = Array.from({ length: 7 }, (_, i) => { const d = new Date(s); d.setDate(d.getDate() + i); return d; });
+  } else {
+    const m = state.monthCursor;
+    const n = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+    days = Array.from({ length: n }, (_, i) => new Date(m.getFullYear(), m.getMonth(), i + 1, 12));
+  }
+  const today = key(new Date());
+  const groups = days.map((d) => [key(d), eventsFor(key(d))]).filter(([, l]) => l.length);
+  const total = groups.reduce((n, [, l]) => n + l.length, 0);
+  if (!total) return `<div class="empty"><h3>Nothing scheduled this ${state.view === 'week' ? 'week' : 'month'}.</h3><p>Use ‹ › to look ahead, or <button class="text-btn" data-action="add-event" data-date="${state.selected}">add an event</button>.</p></div>`;
+  return `<div class="period-count">${total} ${total === 1 ? 'event' : 'events'} this ${state.view === 'week' ? 'week' : 'month'}</div>` + groups.map(([k, l]) =>
+    `<div class="day-title${k === today ? ' is-today' : ''}">${esc(fmtLong(dateFromKey(k)))}${k === today ? ' · Today' : ''}<span>${l.length} ${l.length === 1 ? 'event' : 'events'}</span></div><div>${l.map(eventHTML).join('')}</div>`).join('');
 }
 
 function weekStart() {
@@ -1878,7 +1899,8 @@ const actions = {
   today: () => { state.selected = key(new Date()); state.monthCursor = firstOfMonth(new Date()); renderMain(); },
   filter: (el) => { state.filter = el.dataset.id; renderMain(); },
   'filter-athlete': (el) => { state.filter = el.dataset.id; go('Calendar'); },
-  day: (el) => { state.selected = el.dataset.day; renderMain(); },
+  day: (el) => { state.selected = el.dataset.day; if (state.showAll) { state.showAll = false; try { localStorage.setItem('sidlne-show-all', '0'); } catch {} } renderMain(); },
+  'show-all': (el) => { state.showAll = el.dataset.all === '1'; try { localStorage.setItem('sidlne-show-all', state.showAll ? '1' : '0'); } catch {} renderMain(); },
   period: (el) => {
     const dir = +el.dataset.dir;
     if (state.view === 'week') { const d = dateFromKey(state.selected); d.setDate(d.getDate() + 7 * dir); state.selected = key(d); }
