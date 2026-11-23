@@ -514,7 +514,7 @@ a.primary,a.outline,a.primary:visited,a.outline:visited{text-decoration:none;col
 html.intro-boot,html.intro-boot body{background:#000}
 html.intro-boot #intro{display:flex}
 #intro{--u:calc(max(100vw,100vh)/2732);position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.intro-mark{position:relative;width:calc(720*var(--u));height:calc(440*var(--u));animation:intro-rise 1.1s .3s cubic-bezier(.2,.8,.2,1) forwards}
+.intro-mark{position:relative;width:calc(1008*var(--u));height:calc(616*var(--u));animation:intro-rise 1.1s .3s cubic-bezier(.2,.8,.2,1) forwards}
 .intro-mark img{position:absolute;inset:0;width:100%;height:100%;image-rendering:auto;-webkit-backface-visibility:hidden;backface-visibility:hidden}
 .intro-word,.intro-tag{position:absolute;top:50%;left:0;right:0;text-align:center;color:#fff;font-family:Inter,-apple-system,"SF Pro Display",sans-serif}
 .intro-word{margin-top:calc(150*var(--u));font-size:calc(150*var(--u));font-weight:800;letter-spacing:calc(26*var(--u));padding-left:calc(26*var(--u))}
@@ -525,7 +525,7 @@ html.intro-boot #intro{display:flex}
 .intro-tag span{display:inline-block;opacity:0;transform:translateY(.4em);animation:intro-sentence 1.2s calc(1.9s + var(--j)*1.1s) cubic-bezier(.2,.8,.2,1) forwards}
 @keyframes intro-sentence{to{opacity:1;transform:none}}
 #intro.out{animation:intro-out .8s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none}
-@keyframes intro-rise{to{transform:translateY(calc(-170*var(--u))) scale(.82)}}
+@keyframes intro-rise{to{transform:translateY(calc(-235*var(--u))) scale(.82)}}
 @keyframes intro-letter{0%{opacity:0;transform:translateY(1.1em)}35%{opacity:1}100%{opacity:1;transform:none}}
 @keyframes intro-fade{to{opacity:1}}
 @keyframes intro-out{to{opacity:0;transform:scale(1.08)}}
