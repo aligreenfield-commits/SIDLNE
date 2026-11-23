@@ -1,0 +1,4 @@
+{
+  "_readme": "Sponsors shown in SIDLNE. Add one object per sponsor to \"sponsors\" and set \"active\": true. placement: \"overview\" (card under Up Next) or \"gameday\" (\"presented by\" in the Game Day mix). logo: an https image URL (square, at least 200x200) or leave empty. The app picks these up within a few hours, no app update needed.",
+  "sponsors": []
+}

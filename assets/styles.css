@@ -535,3 +535,14 @@ html.intro-boot #intro{display:flex}
 .list-mode .segmented button{font-size:12px;padding:7px 14px}
 .period-count{padding:10px 22px 0;font-size:12px;font-weight:700;color:var(--muted)}
 .day-title.is-today{color:#4c6125}
+/* Local sponsor card (Overview) and Game Day "presented by" */
+.sponsor-card{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin:0 0 16px;text-decoration:none;color:var(--ink)}
+.sponsor-card img,.sponsor-initial{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;background:#f1f4ec}
+.sponsor-initial{display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#4c6125}
+.sponsor-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.sponsor-text small{font-size:10px;font-weight:800;letter-spacing:1.5px;color:var(--muted)}
+.sponsor-text strong{font-size:15px}
+.sponsor-text span{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sponsor-card i{font-style:normal;font-size:22px;color:var(--muted)}
+.gd-sponsor{display:inline-block;margin-top:10px;font-size:12px;color:#c9d0bd;text-decoration:none}
+.gd-sponsor strong{color:#c6f35a}
