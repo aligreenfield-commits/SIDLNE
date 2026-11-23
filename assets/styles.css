@@ -521,7 +521,9 @@ html.intro-boot #intro{display:flex}
 .intro-word,.intro-tag{position:absolute;top:50%;left:0;right:0;text-align:center;color:#fff;font-family:Inter,-apple-system,"SF Pro Display",sans-serif}
 .intro-word{margin-top:calc(150*var(--u));font-size:calc(150*var(--u));font-weight:800;letter-spacing:calc(26*var(--u));padding-left:calc(26*var(--u))}
 .intro-word span{display:inline-block;opacity:0;transform:translateY(.35em);filter:blur(10px);animation:intro-letter .85s calc(.75s + var(--i)*.13s) cubic-bezier(.2,.8,.2,1) forwards}
-.intro-tag{margin-top:calc(360*var(--u));font-size:calc(46*var(--u));font-weight:600;letter-spacing:calc(1*var(--u));color:#c9d0bd;opacity:0;animation:intro-fade .9s 1.8s ease-out forwards}
+.intro-tag{margin-top:calc(360*var(--u));font-size:calc(46*var(--u));font-weight:600;letter-spacing:calc(1*var(--u));color:#c9d0bd}
+.intro-tag span{display:inline-block;opacity:0;transform:translateY(.4em);animation:intro-sentence 1.2s calc(1.8s + var(--j)*1s) cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes intro-sentence{to{opacity:1;transform:none}}
 #intro.out{animation:intro-out .8s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none}
 @keyframes intro-rise{to{transform:translateY(calc(-170*var(--u))) scale(.82)}}
 @keyframes intro-slash{0%{filter:drop-shadow(0 0 0 rgba(198,243,90,0));transform:none}45%{filter:drop-shadow(0 0 calc(46*var(--u)) rgba(198,243,90,.95));transform:translateX(calc(6*var(--u))) skewX(-4deg)}100%{filter:drop-shadow(0 0 calc(14*var(--u)) rgba(198,243,90,.45));transform:none}}
